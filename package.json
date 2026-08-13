@@ -1,0 +1,21 @@
+{
+  "name": "pi-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard web per gestire un Raspberry Pi: terminale, stato sistema, servizi, file, API",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "node-pty": "^1.0.0",
+    "systeminformation": "^5.23.5",
+    "ws": "^8.18.0"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}
