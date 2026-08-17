@@ -54,9 +54,18 @@ npm run watch:css
 
 ## Aggiornare la dashboard sul Pi
 
+Il servizio esegue automaticamente `git pull` + `npm install` (script [scripts/update.sh](scripts/update.sh)) ad ogni avvio/riavvio, quindi basta:
+
+```bash
+sudo systemctl restart pi-dashboard
+```
+
+(o un riavvio del Pi). Se non c'è connessione o il pull fallisce, il servizio parte comunque con il codice già presente sul disco.
+
+Per aggiornare ed avviare manualmente senza passare da systemd:
+
 ```bash
 cd pi-dashboard
-git pull
-npm install
+./scripts/update.sh
 sudo systemctl restart pi-dashboard
 ```

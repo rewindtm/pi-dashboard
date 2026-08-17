@@ -45,17 +45,21 @@ fi
 echo "== Permesso per gestire il WiFi tramite nmcli =="
 sudo usermod -aG netdev "$SERVICE_USER" || true
 
+chmod +x "$DIR/scripts/update.sh"
+
 echo "== Creazione servizio systemd =="
 SERVICE_FILE="/etc/systemd/system/pi-dashboard.service"
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=Pi Dashboard
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$DIR
+ExecStartPre=-$DIR/scripts/update.sh
 ExecStart=$(command -v node) $DIR/server/index.js
 Restart=on-failure
 EnvironmentFile=$DIR/.env
