@@ -5,10 +5,7 @@
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server/index.js",
-    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/css/output.css --minify",
-    "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/css/output.css --watch",
-    "postinstall": "npm run build:css"
+    "start": "node server/index.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -18,9 +15,6 @@
     "node-pty": "^1.0.0",
     "systeminformation": "^5.23.5",
     "ws": "^8.18.0"
-  },
-  "devDependencies": {
-    "tailwindcss": "^3.4.13"
   },
   "allowScripts": {
     "node-pty@1.1.0": true

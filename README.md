@@ -2,7 +2,7 @@
 
 Dashboard web per gestire un Raspberry Pi via Tailscale (o rete locale): terminale interattivo nel browser, stato di sistema, WiFi, aggiornamenti pacchetti, gestione servizi systemd, file manager e un'API REST per comandi remoti.
 
-Frontend: Node.js + Express, viste server-side in **EJS**, stile con **Tailwind CSS** (compilato, non via CDN).
+Frontend: Node.js + Express, viste server-side in **EJS**, stile con **Tailwind CSS** (via CDN — richiede che il browser che apre la dashboard abbia accesso a Internet per caricare `cdn.tailwindcss.com`).
 
 ## Funzionalità
 
@@ -33,15 +33,9 @@ Al termine mostra l'URL (`http://<ip-tailscale>:7890`) e il token da usare per a
 ## Sviluppo/test locale
 
 ```bash
-npm install       # compila anche il CSS Tailwind (postinstall)
+npm install
 cp .env.example .env   # imposta un token
 npm start
-```
-
-Durante lo sviluppo del frontend, per ricompilare il CSS Tailwind ad ogni modifica:
-
-```bash
-npm run watch:css
 ```
 
 ## Sicurezza

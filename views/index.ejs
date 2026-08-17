@@ -4,12 +4,81 @@
 <meta charset="utf-8" />
 <title>Pi Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" href="/css/output.css" />
 <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          accent: { DEFAULT: '#0ca678', light: '#12b886', dark: '#099268' },
+          surface: { light: '#f4f6f8', dark: '#0f1115' },
+          panel: { light: '#ffffff', dark: '#171a21' },
+          border: { light: '#e2e5ea', dark: '#2a2e38' },
+          sidebar: '#0b1220',
+          'sidebar-hover': '#141d31',
+        },
+      },
+    },
+  };
   // Applica il tema salvato prima del paint per evitare flash del tema sbagliato.
   if (localStorage.getItem('pi_dashboard_theme') !== 'light') document.documentElement.classList.add('dark');
 </script>
+<style type="text/tailwindcss">
+  @layer base {
+    body {
+      @apply bg-surface-light text-gray-800 dark:bg-surface-dark dark:text-gray-100;
+    }
+  }
+  @layer components {
+    .btn {
+      @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-accent px-3.5 py-2 text-sm font-medium text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
+    }
+    .btn-secondary {
+      @apply btn border-border-light bg-white text-gray-700 hover:bg-gray-50 dark:border-border-dark dark:bg-panel-dark dark:text-gray-200 dark:hover:bg-white/5;
+    }
+    .btn-danger {
+      @apply btn bg-red-600 hover:bg-red-500;
+    }
+    .card {
+      @apply rounded-xl border border-border-light bg-panel-light p-4 shadow-sm dark:border-border-dark dark:bg-panel-dark dark:shadow-none;
+    }
+    .stat-card {
+      @apply card flex items-center gap-3;
+    }
+    .stat-icon {
+      @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white;
+    }
+    .input {
+      @apply w-full rounded-lg border border-border-light bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent dark:border-border-dark dark:bg-black/40 dark:text-gray-100 dark:placeholder:text-gray-500;
+    }
+    .side-link {
+      @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition hover:bg-sidebar-hover hover:text-white;
+    }
+    .side-link.active {
+      @apply border-l-2 border-accent bg-sidebar-hover text-white;
+    }
+    .side-link svg {
+      @apply h-5 w-5 shrink-0;
+    }
+    .table-base {
+      @apply w-full border-collapse text-sm;
+    }
+    .table-base th {
+      @apply border-b border-border-light px-2 py-1.5 text-left font-semibold text-gray-500 dark:border-border-dark dark:text-gray-400;
+    }
+    .table-base td {
+      @apply border-b border-border-light px-2 py-1.5 dark:border-border-dark;
+    }
+    .badge {
+      @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium;
+    }
+    .icon-btn {
+      @apply flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5;
+    }
+  }
+</style>
 </head>
 <body class="bg-surface-light dark:bg-surface-dark text-gray-800 dark:text-gray-100">
 
