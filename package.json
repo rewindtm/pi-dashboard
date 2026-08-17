@@ -5,15 +5,22 @@
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/css/output.css --minify",
+    "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/css/output.css --watch",
+    "postinstall": "npm run build:css"
   },
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.6.1",
+    "ejs": "^3.1.10",
     "express": "^4.19.2",
     "node-pty": "^1.0.0",
     "systeminformation": "^5.23.5",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.13"
   },
   "allowScripts": {
     "node-pty@1.1.0": true

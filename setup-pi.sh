@@ -29,12 +29,21 @@ EOF
   echo "Creato .env con un token generato automaticamente."
 fi
 
-echo "== Configurazione permesso systemctl senza password (per la gestione servizi dalla dashboard) =="
-SUDOERS_FILE="/etc/sudoers.d/pi-dashboard-systemctl"
+echo "== Configurazione permessi sudo senza password (systemctl, apt, reboot/shutdown) =="
+SUDOERS_FILE="/etc/sudoers.d/pi-dashboard"
 if [ ! -f "$SUDOERS_FILE" ]; then
-  echo "$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl" | sudo tee "$SUDOERS_FILE" > /dev/null
+  cat <<EOF | sudo tee "$SUDOERS_FILE" > /dev/null
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get update -qq
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get upgrade -y
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/reboot
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/shutdown now
+EOF
   sudo chmod 440 "$SUDOERS_FILE"
 fi
+
+echo "== Permesso per gestire il WiFi tramite nmcli =="
+sudo usermod -aG netdev "$SERVICE_USER" || true
 
 echo "== Creazione servizio systemd =="
 SERVICE_FILE="/etc/systemd/system/pi-dashboard.service"

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="it" class="dark">
+<head>
+<meta charset="utf-8" />
+<title>Pi Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/css/output.css" />
+<link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+</head>
+<body class="bg-bg text-gray-100">
+
+<div id="login" class="flex h-screen flex-col items-center justify-center gap-3">
+  <h2 class="mb-2 text-xl font-semibold">Pi Dashboard</h2>
+  <input id="token-input" type="password" placeholder="Token di accesso" class="input w-72" />
+  <button class="btn" onclick="login()">Accedi</button>
+  <div id="login-error" class="text-sm text-red-400"></div>
+</div>
+
+<div id="app" class="hidden h-screen flex-col">
+  <header class="flex items-center gap-4 border-b border-border bg-panel px-4 py-2.5">
+    <h1 id="hostname" class="flex-1 text-sm font-semibold text-gray-400">Pi Dashboard</h1>
+    <button class="btn-secondary" onclick="powerAction('reboot')">Riavvia</button>
+    <button class="btn-danger" onclick="powerAction('shutdown')">Spegni</button>
+    <button class="btn-secondary" onclick="logout()">Esci</button>
+  </header>
+  <nav class="flex gap-1 overflow-x-auto border-b border-border px-4 py-2">
+    <button class="tab-btn active" data-view="terminal-view">Terminale</button>
+    <button class="tab-btn" data-view="system-view">Sistema</button>
+    <button class="tab-btn" data-view="wifi-view">WiFi</button>
+    <button class="tab-btn" data-view="updates-view">Aggiornamenti</button>
+    <button class="tab-btn" data-view="services-view">Servizi</button>
+    <button class="tab-btn" data-view="files-view">File</button>
+    <button class="tab-btn" data-view="exec-view">API / Esegui</button>
+  </nav>
+  <main class="flex-1 overflow-auto p-4">
+    <div id="terminal-view" class="view flex h-full flex-col">
+      <div id="terminal" class="flex-1 rounded-lg bg-black p-2"></div>
+    </div>
+
+    <div id="system-view" class="view hidden">
+      <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </div>
+
+    <div id="wifi-view" class="view hidden space-y-4">
+      <div class="card">
+        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Stato</h3>
+        <div id="wifi-status" class="text-sm">Caricamento...</div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button class="btn-secondary" onclick="loadWifi()">Aggiorna scansione</button>
+        <button class="btn-danger" onclick="fetch('/api/wifi/disconnect',{method:'POST',headers:authHeaders()}).then(loadWifi)">Disconnetti</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="wifi-table" class="table-base">
+          <thead><tr><th>SSID</th><th>Segnale</th><th>Sicurezza</th><th>Azioni</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card space-y-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Connetti</h3>
+        <div class="flex flex-wrap gap-2">
+          <input id="wifi-connect-ssid" class="input max-w-xs" placeholder="SSID" />
+          <input id="wifi-connect-password" type="password" class="input max-w-xs" placeholder="Password (se richiesta)" />
+          <button class="btn" onclick="connectWifi()">Connetti</button>
+        </div>
+        <div id="wifi-connect-out" class="text-sm text-gray-400"></div>
+      </div>
+    </div>
+
+    <div id="updates-view" class="view hidden space-y-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <button class="btn-secondary" onclick="checkUpdates()">Controlla aggiornamenti</button>
+        <button id="upgrade-btn" class="btn hidden" onclick="upgradeAll()">Aggiorna tutto (apt upgrade)</button>
+      </div>
+      <div id="updates-summary" class="card text-sm text-gray-300">Premi "Controlla aggiornamenti" per verificare i pacchetti disponibili.</div>
+      <div class="overflow-x-auto">
+        <table id="updates-table" class="table-base">
+          <thead><tr><th>Pacchetto</th><th>Versione attuale</th><th>Nuova versione</th><th>Repo</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <pre id="updates-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs"></pre>
+    </div>
+
+    <div id="services-view" class="view hidden">
+      <div class="mb-3">
+        <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="services-table" class="table-base">
+          <thead><tr><th>Unit</th><th>Load</th><th>Active</th><th>Sub</th><th>Azioni</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="files-view" class="view hidden">
+      <div id="files-path" class="mb-2 text-sm text-gray-400"></div>
+      <div class="overflow-x-auto">
+        <table id="files-list" class="table-base">
+          <thead><tr><th>Nome</th><th>Dimensione</th><th>Azioni</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h4 class="mb-1.5 mt-4 text-sm font-semibold text-gray-300">Editor</h4>
+      <div id="editor-path" class="mb-1.5 text-sm text-gray-400"></div>
+      <textarea id="file-editor" placeholder="Apri un file per modificarlo..." class="h-72 w-full rounded-lg border border-border bg-black p-2 font-mono text-sm text-gray-100"></textarea>
+      <div class="mt-2"><button class="btn" onclick="saveFile()">Salva</button></div>
+    </div>
+
+    <div id="exec-view" class="view hidden">
+      <p class="mb-2 text-sm text-gray-400">Esegui un comando remoto tramite l'API (usata anche per l'accesso programmatico).</p>
+      <div class="mb-3 flex flex-wrap gap-2">
+        <input id="exec-cmd" class="input flex-1" placeholder="es. uptime" />
+        <button class="btn" onclick="runExec()">Esegui</button>
+      </div>
+      <pre id="exec-out" class="min-h-[120px] whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs"></pre>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
