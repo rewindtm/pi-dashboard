@@ -61,6 +61,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     if (btn.dataset.view === 'files-view') loadFiles('');
     if (btn.dataset.view === 'wifi-view') loadWifi();
     if (btn.dataset.view === 'updates-view') resetUpdatesView();
+    if (btn.dataset.view === 'github-view') loadGithubStatus();
     if (btn.dataset.view === 'terminal-view' && window.fitAddon) setTimeout(() => window.fitAddon.fit(), 50);
   });
 });
@@ -407,6 +408,212 @@ async function powerAction(action) {
   if (!confirm('Confermi di voler ' + label + ' il Raspberry Pi?')) return;
   await fetch('/api/power/' + action, { method: 'POST', headers: authHeaders() });
   alert('Comando inviato. La dashboard potrebbe diventare irraggiungibile.');
+}
+
+// --- GitHub ---
+let githubRepos = [];
+let githubApps = [];
+const openLogsFor = new Set();
+let logsTimer = null;
+
+async function loadGithubStatus() {
+  const res = await fetch('/api/github/status', { headers: authHeaders() });
+  const d = await res.json();
+  const connectBox = document.getElementById('github-connect');
+  const connectedBox = document.getElementById('github-connected');
+  if (d.connected) {
+    connectBox.classList.add('hidden');
+    connectedBox.classList.remove('hidden');
+    document.getElementById('github-avatar').src = d.user.avatarUrl || '';
+    document.getElementById('github-login').textContent = d.user.login;
+    await loadApps();
+    loadRepos();
+  } else {
+    connectBox.classList.remove('hidden');
+    connectedBox.classList.add('hidden');
+  }
+}
+
+async function connectGithub() {
+  const input = document.getElementById('github-token-input');
+  const out = document.getElementById('github-connect-out');
+  const token = input.value.trim();
+  if (!token) return;
+  out.textContent = 'Verifica in corso...';
+  const res = await fetch('/api/github/token', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  const d = await res.json();
+  if (!res.ok) {
+    out.textContent = 'Errore: ' + (d.error || 'token non valido');
+    return;
+  }
+  input.value = '';
+  out.textContent = '';
+  loadGithubStatus();
+}
+
+async function disconnectGithub() {
+  if (!confirm('Disconnettere GitHub? Il token verrà rimosso dal Pi (le app già clonate restano).')) return;
+  await fetch('/api/github/token', { method: 'DELETE', headers: authHeaders() });
+  loadGithubStatus();
+}
+
+async function loadRepos() {
+  const tbody = document.querySelector('#repos-table tbody');
+  tbody.innerHTML = '<tr><td colspan="4">Caricamento...</td></tr>';
+  try {
+    const res = await fetch('/api/github/repos', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    githubRepos = d.repos;
+    renderRepos();
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+  }
+}
+
+function renderRepos() {
+  const filter = (document.getElementById('repos-filter').value || '').toLowerCase();
+  const tbody = document.querySelector('#repos-table tbody');
+  const clonedNames = new Set(githubApps.map((a) => a.fullName));
+  const rows = githubRepos
+    .filter((r) => r.fullName.toLowerCase().includes(filter))
+    .map((r) => {
+      const cloned = clonedNames.has(r.fullName);
+      const visBadge = r.private
+        ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">privata</span>'
+        : '<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">pubblica</span>';
+      const action = cloned
+        ? '<span class="text-xs text-gray-500 dark:text-gray-400">già clonata</span>'
+        : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo('${r.fullName}','${r.cloneUrl}')">Clona</button>`;
+      return `<tr>
+        <td>
+          <a href="${r.htmlUrl}" target="_blank" rel="noopener" class="text-accent hover:underline">${r.fullName}</a>
+          ${r.description ? `<div class="text-xs text-gray-500 dark:text-gray-400">${r.description}</div>` : ''}
+        </td>
+        <td>${new Date(r.updatedAt).toLocaleDateString()}</td>
+        <td>${visBadge}</td>
+        <td>${action}</td>
+      </tr>`;
+    })
+    .join('');
+  tbody.innerHTML = rows || '<tr><td colspan="4">Nessuna repository trovata</td></tr>';
+}
+
+async function cloneRepo(fullName, cloneUrl) {
+  const res = await fetch('/api/apps/clone', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fullName, cloneUrl }),
+  });
+  const d = await res.json();
+  if (!res.ok) return alert('Errore clone: ' + (d.error || d.detail || 'sconosciuto'));
+  await loadApps();
+  renderRepos();
+}
+
+async function loadApps() {
+  const res = await fetch('/api/apps', { headers: authHeaders() });
+  const d = await res.json();
+  githubApps = d.apps || [];
+  renderApps();
+}
+
+function renderApps() {
+  const container = document.getElementById('apps-list');
+  if (!githubApps.length) {
+    container.innerHTML = '<div class="card text-sm text-gray-500 dark:text-gray-400">Nessuna app clonata. Clona una repository qui sopra per iniziare.</div>';
+    return;
+  }
+  container.innerHTML = githubApps
+    .map((a) => {
+      const running = a.status === 'running';
+      const logsOpen = openLogsFor.has(a.id);
+      const startBtn = running
+        ? `<button class="btn-danger !px-2 !py-1 text-xs" onclick="stopApp('${a.id}')">Ferma</button>`
+        : `<button class="btn !px-2 !py-1 text-xs" onclick="startApp('${a.id}')" ${a.startCommand ? '' : 'disabled title="imposta prima un comando"'}>Avvia</button>`;
+      return `<div class="card space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full ${running ? 'bg-green-500' : 'bg-gray-400'}"></span>
+          <span class="font-semibold">${a.fullName}</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400">${running ? 'in esecuzione' : 'ferma'}</span>
+          <div class="ml-auto flex flex-wrap gap-1.5">
+            ${startBtn}
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Pull</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleLogs('${a.id}')">${logsOpen ? 'Nascondi log' : 'Log'}</button>
+            <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteApp('${a.id}')">Elimina</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="cmd-${a.id}" class="input max-w-md" placeholder="comando di avvio, es. npm start" value="${(a.startCommand || '').replace(/"/g, '&quot;')}" />
+          <button class="btn-secondary !px-2 !py-1 text-xs" onclick="saveStartCommand('${a.id}')">Salva comando</button>
+        </div>
+        ${logsOpen ? `<pre id="logs-${a.id}" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>` : ''}
+      </div>`;
+    })
+    .join('');
+  if (openLogsFor.size) refreshOpenLogs();
+}
+
+async function saveStartCommand(id) {
+  const value = document.getElementById('cmd-' + id).value;
+  await fetch('/api/apps/' + id, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ startCommand: value }),
+  });
+  await loadApps();
+}
+
+async function startApp(id) {
+  const res = await fetch('/api/apps/' + id + '/start', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) return alert('Errore: ' + (d.error || 'sconosciuto'));
+  openLogsFor.add(id);
+  await loadApps();
+}
+
+async function stopApp(id) {
+  await fetch('/api/apps/' + id + '/stop', { method: 'POST', headers: authHeaders() });
+  await loadApps();
+}
+
+async function pullApp(id) {
+  const res = await fetch('/api/apps/' + id + '/pull', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  alert(d.ok ? 'Aggiornata dall\'ultima versione su GitHub' : 'Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+}
+
+async function deleteApp(id) {
+  if (!confirm('Eliminare la app e la cartella clonata? Non è reversibile.')) return;
+  await fetch('/api/apps/' + id, { method: 'DELETE', headers: authHeaders() });
+  openLogsFor.delete(id);
+  await loadApps();
+  renderRepos();
+}
+
+function toggleLogs(id) {
+  if (openLogsFor.has(id)) openLogsFor.delete(id);
+  else openLogsFor.add(id);
+  renderApps();
+}
+
+async function refreshOpenLogs() {
+  clearTimeout(logsTimer);
+  for (const id of openLogsFor) {
+    const el = document.getElementById('logs-' + id);
+    if (!el) continue;
+    try {
+      const res = await fetch('/api/apps/' + id + '/logs', { headers: authHeaders() });
+      const d = await res.json();
+      el.textContent = d.logs || '(nessun output ancora)';
+      el.scrollTop = el.scrollHeight;
+    } catch {}
+  }
+  if (openLogsFor.size) logsTimer = setTimeout(refreshOpenLogs, 2000);
 }
 
 if (TOKEN) {

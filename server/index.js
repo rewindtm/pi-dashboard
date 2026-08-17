@@ -13,6 +13,8 @@ const execRoutes = require('./routes/exec');
 const wifiRoutes = require('./routes/wifi');
 const updatesRoutes = require('./routes/updates');
 const powerRoutes = require('./routes/power');
+const githubRoutes = require('./routes/github');
+const appsRoutes = require('./routes/apps');
 
 if (!process.env.DASHBOARD_TOKEN) {
   console.error('DASHBOARD_TOKEN non impostato. Copia .env.example in .env e imposta un token.');
@@ -39,6 +41,8 @@ app.use('/api/exec', httpAuth, execRoutes);
 app.use('/api/wifi', httpAuth, wifiRoutes);
 app.use('/api/updates', httpAuth, updatesRoutes);
 app.use('/api/power', httpAuth, powerRoutes);
+app.use('/api/github', httpAuth, githubRoutes);
+app.use('/api/apps', httpAuth, appsRoutes);
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws/terminal' });
