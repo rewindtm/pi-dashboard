@@ -1,122 +1,182 @@
 <!doctype html>
-<html lang="it" class="dark">
+<html lang="it">
 <head>
 <meta charset="utf-8" />
 <title>Pi Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="/css/output.css" />
 <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+<script>
+  // Applica il tema salvato prima del paint per evitare flash del tema sbagliato.
+  if (localStorage.getItem('pi_dashboard_theme') !== 'light') document.documentElement.classList.add('dark');
+</script>
 </head>
-<body class="bg-bg text-gray-100">
+<body class="bg-surface-light dark:bg-surface-dark text-gray-800 dark:text-gray-100">
 
 <div id="login" class="flex h-screen flex-col items-center justify-center gap-3">
-  <h2 class="mb-2 text-xl font-semibold">Pi Dashboard</h2>
+  <div class="mb-2 flex items-center gap-2 text-xl font-semibold">
+    <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M15.75 3v1.5M3 8.25h1.5M3 15.75h1.5M19.5 8.25H21M19.5 15.75H21M8.25 19.5V21M15.75 19.5V21M6.75 6.75h10.5v10.5H6.75V6.75Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h4.5v4.5h-4.5v-4.5Z" /></svg>
+    </span>
+    Pi Dashboard
+  </div>
   <input id="token-input" type="password" placeholder="Token di accesso" class="input w-72" />
   <button class="btn" onclick="login()">Accedi</button>
-  <div id="login-error" class="text-sm text-red-400"></div>
+  <div id="login-error" class="text-sm text-red-500"></div>
 </div>
 
-<div id="app" class="hidden h-screen flex-col">
-  <header class="flex items-center gap-4 border-b border-border bg-panel px-4 py-2.5">
-    <h1 id="hostname" class="flex-1 text-sm font-semibold text-gray-400">Pi Dashboard</h1>
-    <button class="btn-secondary" onclick="powerAction('reboot')">Riavvia</button>
-    <button class="btn-danger" onclick="powerAction('shutdown')">Spegni</button>
-    <button class="btn-secondary" onclick="logout()">Esci</button>
-  </header>
-  <nav class="flex gap-1 overflow-x-auto border-b border-border px-4 py-2">
-    <button class="tab-btn active" data-view="terminal-view">Terminale</button>
-    <button class="tab-btn" data-view="system-view">Sistema</button>
-    <button class="tab-btn" data-view="wifi-view">WiFi</button>
-    <button class="tab-btn" data-view="updates-view">Aggiornamenti</button>
-    <button class="tab-btn" data-view="services-view">Servizi</button>
-    <button class="tab-btn" data-view="files-view">File</button>
-    <button class="tab-btn" data-view="exec-view">API / Esegui</button>
-  </nav>
-  <main class="flex-1 overflow-auto p-4">
-    <div id="terminal-view" class="view flex h-full flex-col">
-      <div id="terminal" class="flex-1 rounded-lg bg-black p-2"></div>
-    </div>
+<div id="app" class="hidden h-screen">
+  <div id="sidebar-backdrop" class="fixed inset-0 z-20 hidden bg-black/50 lg:hidden" onclick="toggleSidebar(false)"></div>
 
-    <div id="system-view" class="view hidden">
-      <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 flex w-60 -translate-x-full flex-col bg-sidebar transition-transform lg:static lg:translate-x-0">
+    <div class="flex items-center gap-2 px-4 py-4 text-white">
+      <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M15.75 3v1.5M3 8.25h1.5M3 15.75h1.5M19.5 8.25H21M19.5 15.75H21M8.25 19.5V21M15.75 19.5V21M6.75 6.75h10.5v10.5H6.75V6.75Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h4.5v4.5h-4.5v-4.5Z" /></svg>
+      </span>
+      <span class="font-semibold">Pi Dashboard</span>
     </div>
+    <nav class="flex-1 space-y-1 overflow-y-auto px-2 py-2">
+      <button class="side-link active" data-view="terminal-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3M4.5 4.5h15a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V6a1.5 1.5 0 011.5-1.5z" /></svg>
+        Terminale
+      </button>
+      <button class="side-link" data-view="system-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v2.25M15.75 3v2.25M8.25 18.75V21M15.75 18.75V21M3 8.25h2.25M3 15.75h2.25M18.75 8.25H21M18.75 15.75H21M5.25 6.75h13.5v10.5H5.25V6.75z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6v6H9V9z" /></svg>
+        Sistema
+      </button>
+      <button class="side-link" data-view="wifi-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856a9.75 9.75 0 0113.788 0M1.924 8.674a14.25 14.25 0 0120.152 0M12 18.75h.008v.008H12v-.008z" /></svg>
+        WiFi
+      </button>
+      <button class="side-link" data-view="updates-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+        Aggiornamenti
+      </button>
+      <button class="side-link" data-view="services-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 17.25v-.228a4.5 4.5 0 00-.12-1.03l-2.268-9.64a3.375 3.375 0 00-3.285-2.602H7.923a3.375 3.375 0 00-3.285 2.602l-2.268 9.64a4.5 4.5 0 00-.12 1.03v.228m19.5 0a3 3 0 01-3 3H5.25a3 3 0 01-3-3m19.5 0a3 3 0 00-3-3H5.25a3 3 0 00-3 3m16.5 0h.008v.008h-.008v-.008zm-3 0h.008v.008h-.008v-.008z" /></svg>
+        Servizi
+      </button>
+      <button class="side-link" data-view="files-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-19.5 0v6a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25v-6m-19.5 0h19.5M4.5 9.75V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M9.75 3.75c1.32 0 2.634.06 3.933.176a2.25 2.25 0 011.5.795l1.245 1.53h4.128a2.25 2.25 0 012.25 2.25v.75" /></svg>
+        File
+      </button>
+      <button class="side-link" data-view="exec-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>
+        API / Esegui
+      </button>
+    </nav>
+    <div class="border-t border-white/10 p-3 text-xs text-gray-500">Pi Dashboard</div>
+  </aside>
 
-    <div id="wifi-view" class="view hidden space-y-4">
-      <div class="card">
-        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Stato</h3>
-        <div id="wifi-status" class="text-sm">Caricamento...</div>
+  <div class="flex h-screen flex-col lg:pl-60">
+    <header class="flex items-center gap-3 border-b border-border-light bg-panel-light px-4 py-2.5 dark:border-border-dark dark:bg-panel-dark">
+      <button class="icon-btn lg:hidden" onclick="toggleSidebar(true)" aria-label="Apri menu">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" /></svg>
+      </button>
+      <h1 id="hostname" class="flex-1 truncate text-sm font-semibold text-gray-500 dark:text-gray-400">Pi Dashboard</h1>
+      <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" aria-label="Cambia tema">
+        <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-6.364-.386 1.591-1.591M3 12h2.25m.386-6.364 1.591 1.591M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        <svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
+      </button>
+      <button class="btn-secondary !px-3 !py-1.5 text-sm" onclick="powerAction('reboot')">Riavvia</button>
+      <button class="btn-danger !px-3 !py-1.5 text-sm" onclick="powerAction('shutdown')">Spegni</button>
+      <button class="btn-secondary !px-3 !py-1.5 text-sm" onclick="logout()">Esci</button>
+    </header>
+
+    <main class="flex-1 overflow-auto p-4">
+      <div id="terminal-view" class="view flex h-full flex-col">
+        <div id="terminal" class="flex-1 rounded-lg bg-black p-2"></div>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <button class="btn-secondary" onclick="loadWifi()">Aggiorna scansione</button>
-        <button class="btn-danger" onclick="fetch('/api/wifi/disconnect',{method:'POST',headers:authHeaders()}).then(loadWifi)">Disconnetti</button>
-      </div>
-      <div class="overflow-x-auto">
-        <table id="wifi-table" class="table-base">
-          <thead><tr><th>SSID</th><th>Segnale</th><th>Sicurezza</th><th>Azioni</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="card space-y-2">
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Connetti</h3>
-        <div class="flex flex-wrap gap-2">
-          <input id="wifi-connect-ssid" class="input max-w-xs" placeholder="SSID" />
-          <input id="wifi-connect-password" type="password" class="input max-w-xs" placeholder="Password (se richiesta)" />
-          <button class="btn" onclick="connectWifi()">Connetti</button>
+
+      <div id="system-view" class="view hidden space-y-4">
+        <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+        <div class="card">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Carico CPU e RAM (tempo reale)</h3>
+          <canvas id="history-chart" class="h-48 w-full"></canvas>
+          <div class="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-accent"></span> CPU</span>
+            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-blue-500"></span> RAM</span>
+          </div>
         </div>
-        <div id="wifi-connect-out" class="text-sm text-gray-400"></div>
       </div>
-    </div>
 
-    <div id="updates-view" class="view hidden space-y-4">
-      <div class="flex flex-wrap items-center gap-2">
-        <button class="btn-secondary" onclick="checkUpdates()">Controlla aggiornamenti</button>
-        <button id="upgrade-btn" class="btn hidden" onclick="upgradeAll()">Aggiorna tutto (apt upgrade)</button>
+      <div id="wifi-view" class="view hidden space-y-4">
+        <div class="card">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Stato</h3>
+          <div id="wifi-status" class="text-sm">Caricamento...</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="btn-secondary" onclick="loadWifi()">Aggiorna scansione</button>
+          <button class="btn-danger" onclick="fetch('/api/wifi/disconnect',{method:'POST',headers:authHeaders()}).then(loadWifi)">Disconnetti</button>
+        </div>
+        <div class="card overflow-x-auto !p-0">
+          <table id="wifi-table" class="table-base">
+            <thead><tr><th>SSID</th><th>Segnale</th><th>Sicurezza</th><th>Azioni</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card space-y-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Connetti</h3>
+          <div class="flex flex-wrap gap-2">
+            <input id="wifi-connect-ssid" class="input max-w-xs" placeholder="SSID" />
+            <input id="wifi-connect-password" type="password" class="input max-w-xs" placeholder="Password (se richiesta)" />
+            <button class="btn" onclick="connectWifi()">Connetti</button>
+          </div>
+          <div id="wifi-connect-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
+        </div>
       </div>
-      <div id="updates-summary" class="card text-sm text-gray-300">Premi "Controlla aggiornamenti" per verificare i pacchetti disponibili.</div>
-      <div class="overflow-x-auto">
-        <table id="updates-table" class="table-base">
-          <thead><tr><th>Pacchetto</th><th>Versione attuale</th><th>Nuova versione</th><th>Repo</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <pre id="updates-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs"></pre>
-    </div>
 
-    <div id="services-view" class="view hidden">
-      <div class="mb-3">
-        <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>
+      <div id="updates-view" class="view hidden space-y-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="btn-secondary" onclick="checkUpdates()">Controlla aggiornamenti</button>
+          <button id="upgrade-btn" class="btn hidden" onclick="upgradeAll()">Aggiorna tutto (apt upgrade)</button>
+        </div>
+        <div id="updates-summary" class="card text-sm text-gray-600 dark:text-gray-300">Premi "Controlla aggiornamenti" per verificare i pacchetti disponibili.</div>
+        <div class="card overflow-x-auto !p-0">
+          <table id="updates-table" class="table-base">
+            <thead><tr><th>Pacchetto</th><th>Versione attuale</th><th>Nuova versione</th><th>Repo</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <pre id="updates-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
       </div>
-      <div class="overflow-x-auto">
-        <table id="services-table" class="table-base">
-          <thead><tr><th>Unit</th><th>Load</th><th>Active</th><th>Sub</th><th>Azioni</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
 
-    <div id="files-view" class="view hidden">
-      <div id="files-path" class="mb-2 text-sm text-gray-400"></div>
-      <div class="overflow-x-auto">
-        <table id="files-list" class="table-base">
-          <thead><tr><th>Nome</th><th>Dimensione</th><th>Azioni</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div id="services-view" class="view hidden space-y-3">
+        <div>
+          <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>
+        </div>
+        <div class="card overflow-x-auto !p-0">
+          <table id="services-table" class="table-base">
+            <thead><tr><th>Unit</th><th>Load</th><th>Active</th><th>Sub</th><th>Azioni</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
-      <h4 class="mb-1.5 mt-4 text-sm font-semibold text-gray-300">Editor</h4>
-      <div id="editor-path" class="mb-1.5 text-sm text-gray-400"></div>
-      <textarea id="file-editor" placeholder="Apri un file per modificarlo..." class="h-72 w-full rounded-lg border border-border bg-black p-2 font-mono text-sm text-gray-100"></textarea>
-      <div class="mt-2"><button class="btn" onclick="saveFile()">Salva</button></div>
-    </div>
 
-    <div id="exec-view" class="view hidden">
-      <p class="mb-2 text-sm text-gray-400">Esegui un comando remoto tramite l'API (usata anche per l'accesso programmatico).</p>
-      <div class="mb-3 flex flex-wrap gap-2">
-        <input id="exec-cmd" class="input flex-1" placeholder="es. uptime" />
-        <button class="btn" onclick="runExec()">Esegui</button>
+      <div id="files-view" class="view hidden">
+        <div id="files-path" class="mb-2 text-sm text-gray-500 dark:text-gray-400"></div>
+        <div class="card overflow-x-auto !p-0">
+          <table id="files-list" class="table-base">
+            <thead><tr><th>Nome</th><th>Dimensione</th><th>Azioni</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h4 class="mb-1.5 mt-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Editor</h4>
+        <div id="editor-path" class="mb-1.5 text-sm text-gray-500 dark:text-gray-400"></div>
+        <textarea id="file-editor" placeholder="Apri un file per modificarlo..." class="h-72 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
+        <div class="mt-2"><button class="btn" onclick="saveFile()">Salva</button></div>
       </div>
-      <pre id="exec-out" class="min-h-[120px] whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs"></pre>
-    </div>
-  </main>
+
+      <div id="exec-view" class="view hidden">
+        <p class="mb-2 text-sm text-gray-500 dark:text-gray-400">Esegui un comando remoto tramite l'API (usata anche per l'accesso programmatico).</p>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <input id="exec-cmd" class="input flex-1" placeholder="es. uptime" />
+          <button class="btn" onclick="runExec()">Esegui</button>
+        </div>
+        <pre id="exec-out" class="min-h-[120px] whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
+      </div>
+    </main>
+  </div>
 </div>
 
 <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>

@@ -25,16 +25,37 @@ function logout() {
 function showApp() {
   document.getElementById('login').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('app').classList.add('flex');
   initApp();
 }
 
-document.querySelectorAll('nav .tab-btn').forEach((btn) => {
+// --- Tema chiaro/scuro ---
+function updateThemeIcon() {
+  const isDark = document.documentElement.classList.contains('dark');
+  document.getElementById('theme-icon-sun').classList.toggle('hidden', !isDark);
+  document.getElementById('theme-icon-moon').classList.toggle('hidden', isDark);
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('pi_dashboard_theme', isDark ? 'dark' : 'light');
+  updateThemeIcon();
+}
+
+updateThemeIcon();
+
+// --- Sidebar mobile ---
+function toggleSidebar(open) {
+  document.getElementById('sidebar').classList.toggle('-translate-x-full', !open);
+  document.getElementById('sidebar-backdrop').classList.toggle('hidden', !open);
+}
+
+document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('nav .tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('#sidebar .side-link').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
     btn.classList.add('active');
     document.getElementById(btn.dataset.view).classList.remove('hidden');
+    toggleSidebar(false);
     if (btn.dataset.view === 'system-view') loadSystem();
     if (btn.dataset.view === 'services-view') loadServices();
     if (btn.dataset.view === 'files-view') loadFiles('');
@@ -84,6 +105,27 @@ function fmtBytes(n) {
   return v.toFixed(1) + ' ' + units[i];
 }
 
+const STAT_ICONS = {
+  cpu: { bg: 'bg-blue-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v2.25M15.75 3v2.25M8.25 18.75V21M15.75 18.75V21M3 8.25h2.25M3 15.75h2.25M18.75 8.25H21M18.75 15.75H21M5.25 6.75h13.5v10.5H5.25V6.75z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6v6H9V9z" />' },
+  load: { bg: 'bg-accent', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />' },
+  temp: { bg: 'bg-amber-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" /><path stroke-linecap="round" stroke-linejoin="round" d="M12 18a3.75 3.75 0 00.495-7.468 5.99 5.99 0 00-1.925 3.547 5.975 5.975 0 01-2.133-1.001A3.75 3.75 0 0012 18z" />' },
+  ram: { bg: 'bg-purple-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M6.75 3H4.5A2.25 2.25 0 002.25 5.25v13.5A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0019.5 3h-2.25m-9 0h9m-9 0v2.25m9-2.25v2.25m-9 0h9M6.75 5.25v13.5h10.5V5.25" />' },
+  uptime: { bg: 'bg-gray-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2" /><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round" fill="none" />' },
+  os: { bg: 'bg-slate-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />' },
+  disk: { bg: 'bg-indigo-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />' },
+};
+
+function statCard(key, label, value) {
+  const icon = STAT_ICONS[key] || STAT_ICONS.os;
+  return `<div class="stat-card">
+    <span class="stat-icon ${icon.bg}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-6 w-6">${icon.svg}</svg></span>
+    <div class="min-w-0">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">${label}</h3>
+      <div class="truncate text-lg font-semibold text-gray-800 dark:text-gray-100">${value}</div>
+    </div>
+  </div>`;
+}
+
 async function loadSystem() {
   try {
     const res = await fetch('/api/system/stats', { headers: authHeaders() });
@@ -92,22 +134,77 @@ async function loadSystem() {
     document.getElementById('hostname').textContent = 'Pi Dashboard — ' + (d.os.hostname || '');
     const temp = d.cpuTemp && d.cpuTemp.main ? d.cpuTemp.main.toFixed(1) + ' °C' : 'n/d';
     const uptimeH = (d.uptime / 3600).toFixed(1) + ' h';
+    const ramPct = d.mem.total ? (d.mem.used / d.mem.total) * 100 : 0;
     const cards = [
-      ['CPU', d.cpu.brand + ' (' + d.cpu.cores + ' core)'],
-      ['Carico CPU', d.load.currentLoad.toFixed(1) + ' %'],
-      ['Temperatura', temp],
-      ['RAM', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total)],
-      ['Uptime', uptimeH],
-      ['OS', d.os.distro + ' (' + d.os.arch + ')'],
+      statCard('cpu', 'CPU', d.cpu.brand + ' (' + d.cpu.cores + ' core)'),
+      statCard('load', 'Carico CPU', d.load.currentLoad.toFixed(1) + ' %'),
+      statCard('temp', 'Temperatura', temp),
+      statCard('ram', 'RAM', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total)),
+      statCard('uptime', 'Uptime', uptimeH),
+      statCard('os', 'OS', d.os.distro + ' (' + d.os.arch + ')'),
     ];
-    d.fs.slice(0, 3).forEach((f) => cards.push(['Disco ' + f.mount, fmtBytes(f.used) + ' / ' + fmtBytes(f.size) + ' (' + f.use + '%)']));
-    document.getElementById('system-cards').innerHTML = cards
-      .map(([k, v]) => `<div class="card"><h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">${k}</h3><div class="text-xl font-semibold text-gray-100">${v}</div></div>`)
-      .join('');
+    d.fs.slice(0, 3).forEach((f) => cards.push(statCard('disk', 'Disco ' + f.mount, fmtBytes(f.used) + ' / ' + fmtBytes(f.size) + ' (' + f.use + '%)')));
+    document.getElementById('system-cards').innerHTML = cards.join('');
+    pushHistoryPoint(d.load.currentLoad, ramPct);
   } catch (err) {
     document.getElementById('system-cards').innerHTML = '<div class="card">Errore: ' + err.message + '</div>';
   }
 }
+
+// --- Grafico storico CPU/RAM ---
+const history = { cpu: [], ram: [] };
+const HISTORY_MAX = 60;
+
+function pushHistoryPoint(cpu, ram) {
+  history.cpu.push(cpu);
+  history.ram.push(ram);
+  if (history.cpu.length > HISTORY_MAX) { history.cpu.shift(); history.ram.shift(); }
+  drawHistoryChart();
+}
+
+function drawHistoryChart() {
+  const canvas = document.getElementById('history-chart');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const isDark = document.documentElement.classList.contains('dark');
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (h / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  function drawLine(data, color) {
+    if (data.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = (i / (HISTORY_MAX - 1)) * w;
+      const y = h - (Math.min(100, Math.max(0, v)) / 100) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(history.cpu, '#0ca678');
+  drawLine(history.ram, '#3b82f6');
+}
+
+window.addEventListener('resize', drawHistoryChart);
 
 async function loadServices() {
   const tbody = document.querySelector('#services-table tbody');
