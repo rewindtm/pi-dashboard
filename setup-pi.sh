@@ -68,6 +68,10 @@ WorkingDirectory=$DIR
 ExecStartPre=-$DIR/scripts/update.sh
 ExecStart=$(command -v node) $DIR/server/index.js
 Restart=on-failure
+# Le app avviate dalla dashboard girano nel suo stesso cgroup: con KillMode=control-group
+# (default) un riavvio del servizio le ucciderebbe tutte insieme alla dashboard.
+# KillMode=process fa sì che systemd fermi solo il processo Node della dashboard.
+KillMode=process
 EnvironmentFile=$DIR/.env
 
 [Install]

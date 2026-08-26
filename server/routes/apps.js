@@ -3,20 +3,48 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
-const { readJson, writeJson } = require('../store');
+const { readJson, writeJson, DATA_DIR } = require('../store');
 
 const router = express.Router();
 
 const APPS_ROOT = path.resolve(process.env.APPS_ROOT || path.join(os.homedir(), 'pi-dashboard-apps'));
 fs.mkdirSync(APPS_ROOT, { recursive: true });
 
-const running = new Map(); // id -> { proc, logs: string[], startedAt }
-const LOG_MAX = 300;
+const LOG_DIR = path.join(DATA_DIR, 'logs');
+fs.mkdirSync(LOG_DIR, { recursive: true });
+const LOG_MAX_BYTES = 200 * 1024;
+const logPath = (id) => path.join(LOG_DIR, id + '.log');
 
 const getApps = () => readJson('apps.json', []);
 const saveApps = (apps) => writeJson('apps.json', apps);
 const safeDirName = (name) => name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-const status = (app) => (running.has(app.id) ? 'running' : 'stopped');
+
+// Il processo è avviato con detached:true (pid == pgid del gruppo), quindi resta vivo
+// anche se la dashboard viene riavviata (systemd è configurato con KillMode=process).
+// Lo stato "in esecuzione" si ricava sempre controllando se quel pid esiste ancora,
+// non da uno stato interno della dashboard che andrebbe perso al riavvio.
+function isAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function status(app) {
+  if (app.pid && !isAlive(app.pid)) {
+    const apps = getApps();
+    const cur = apps.find((a) => a.id === app.id);
+    if (cur && cur.pid === app.pid) {
+      cur.pid = null;
+      saveApps(apps);
+    }
+    app.pid = null;
+  }
+  return app.pid ? 'running' : 'stopped';
+}
 
 // Variabili impostate nel .env della dashboard che non devono trapelare nel processo
 // figlio: se l'app usa dotenv, questo di default non sovrascrive variabili già presenti
@@ -87,7 +115,7 @@ router.post('/clone', express.json(), (req, res) => {
 
   execFile('git', ['clone', authUrl, target], { timeout: 120000 }, (err, stdout, stderr) => {
     if (err) return res.status(500).json({ error: 'clone fallito', detail: stderr || err.message });
-    const app = { id: dirName, fullName, dir: dirName, cloneUrl, startCommand: '', createdAt: new Date().toISOString() };
+    const app = { id: dirName, fullName, dir: dirName, cloneUrl, startCommand: '', pid: null, createdAt: new Date().toISOString() };
     apps.push(app);
     saveApps(apps);
     res.json({ ok: true, app });
@@ -103,58 +131,64 @@ router.put('/:id', express.json(), (req, res) => {
   res.json({ ok: true, app });
 });
 
-function startProcess(app) {
-  if (running.has(app.id)) return { ok: false, status: 409, error: 'già in esecuzione' };
+function startProcess(id) {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === id);
+  if (!app) return { ok: false, status: 404, error: 'non trovata' };
+  if (isAlive(app.pid)) return { ok: false, status: 409, error: 'già in esecuzione' };
   if (!app.startCommand) return { ok: false, status: 400, error: 'imposta prima un comando di avvio' };
 
   const cwd = path.join(APPS_ROOT, app.dir);
-  const proc = spawn(app.startCommand, { shell: true, cwd, detached: true, env: childEnv() });
-  const entry = { proc, logs: [], startedAt: Date.now() };
-  running.set(app.id, entry);
-
-  const pushLog = (chunk) => {
-    entry.logs.push(chunk.toString());
-    if (entry.logs.length > LOG_MAX) entry.logs.shift();
-  };
-  proc.stdout.on('data', pushLog);
-  proc.stderr.on('data', pushLog);
-  proc.on('error', (err) => pushLog(`\n[errore avvio: ${err.message}]\n`));
-  proc.on('exit', (code) => {
-    entry.logs.push(`\n[processo terminato con codice ${code}]\n`);
-    running.delete(app.id);
+  const fd = fs.openSync(logPath(app.id), 'w');
+  const proc = spawn(app.startCommand, {
+    shell: true,
+    cwd,
+    detached: true,
+    env: childEnv(),
+    stdio: ['ignore', fd, fd],
   });
+  fs.closeSync(fd);
   proc.unref();
+
+  app.pid = proc.pid;
+  app.startedAt = Date.now();
+  saveApps(apps);
 
   return { ok: true };
 }
 
 function stopProcess(id) {
-  const entry = running.get(id);
-  if (!entry) return { ok: false, status: 404, error: 'non in esecuzione' };
+  const apps = getApps();
+  const app = apps.find((a) => a.id === id);
+  if (!app || !isAlive(app.pid)) return { ok: false, status: 404, error: 'non in esecuzione' };
   try {
-    process.kill(-entry.proc.pid, 'SIGTERM');
+    process.kill(-app.pid, 'SIGTERM');
   } catch {
-    try { entry.proc.kill('SIGTERM'); } catch {}
+    try {
+      process.kill(app.pid, 'SIGTERM');
+    } catch {}
   }
   return { ok: true };
 }
 
-function waitUntilStopped(id, timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const check = () => {
-      if (!running.has(id) || Date.now() - start > timeoutMs) return resolve();
-      setTimeout(check, 200);
-    };
-    check();
-  });
+async function waitUntilStopped(id, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const apps = getApps();
+    const app = apps.find((a) => a.id === id);
+    if (!app || !isAlive(app.pid)) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const apps = getApps();
+  const app = apps.find((a) => a.id === id);
+  if (app && !isAlive(app.pid) && app.pid) {
+    app.pid = null;
+    saveApps(apps);
+  }
 }
 
 router.post('/:id/start', (req, res) => {
-  const apps = getApps();
-  const app = apps.find((a) => a.id === req.params.id);
-  if (!app) return res.status(404).json({ error: 'non trovata' });
-  const result = startProcess(app);
+  const result = startProcess(req.params.id);
   res.status(result.ok ? 200 : result.status).json(result);
 });
 
@@ -165,11 +199,10 @@ router.post('/:id/stop', (req, res) => {
 
 router.post('/:id/restart', async (req, res) => {
   const apps = getApps();
-  const app = apps.find((a) => a.id === req.params.id);
-  if (!app) return res.status(404).json({ error: 'non trovata' });
-  stopProcess(app.id);
-  await waitUntilStopped(app.id);
-  const result = startProcess(app);
+  if (!apps.find((a) => a.id === req.params.id)) return res.status(404).json({ error: 'non trovata' });
+  stopProcess(req.params.id);
+  await waitUntilStopped(req.params.id);
+  const result = startProcess(req.params.id);
   res.status(result.ok ? 200 : result.status).json(result);
 });
 
@@ -184,15 +217,17 @@ router.post('/:id/install', (req, res) => {
 });
 
 router.get('/:id/resources', async (req, res) => {
-  const entry = running.get(req.params.id);
-  if (!entry) return res.json({ running: false });
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  if (status(app) !== 'running') return res.json({ running: false });
 
-  // Somma CPU/RAM di tutto l'albero di processi del gruppo (il processo è avviato
-  // con detached:true, quindi il suo pid è anche il pgid dell'intero albero).
+  // Somma CPU/RAM di tutto l'albero di processi del gruppo (pid == pgid, essendo
+  // stato avviato con detached:true).
   const psRes = await run('ps', ['-e', '-o', 'pid=,pgid=,pcpu=,rss='], null, 5000);
   if (!psRes.ok) return res.status(500).json({ error: 'ps non disponibile', detail: psRes.stderr });
 
-  const pgid = entry.proc.pid;
+  const pgid = app.pid;
   let cpu = 0;
   let memKb = 0;
   let procCount = 0;
@@ -211,8 +246,15 @@ router.get('/:id/resources', async (req, res) => {
 });
 
 router.get('/:id/logs', (req, res) => {
-  const entry = running.get(req.params.id);
-  res.json({ running: !!entry, logs: entry ? entry.logs.join('') : '' });
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  let logs = '';
+  try {
+    const buf = fs.readFileSync(logPath(app.id));
+    logs = buf.length > LOG_MAX_BYTES ? buf.subarray(buf.length - LOG_MAX_BYTES).toString('utf8') : buf.toString('utf8');
+  } catch {}
+  res.json({ running: status(app) === 'running', logs });
 });
 
 router.get('/:id/git', async (req, res) => {
@@ -272,17 +314,18 @@ router.delete('/:id', async (req, res) => {
   const idx = apps.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'non trovata' });
 
-  if (running.has(req.params.id)) {
-    stopProcess(req.params.id);
-    running.delete(req.params.id);
-  }
+  stopProcess(req.params.id);
+  await waitUntilStopped(req.params.id);
+
   try {
     await fs.promises.rm(path.join(APPS_ROOT, apps[idx].dir), { recursive: true, force: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-  apps.splice(idx, 1);
-  saveApps(apps);
+  await fs.promises.rm(logPath(req.params.id), { force: true }).catch(() => {});
+
+  const remaining = getApps().filter((a) => a.id !== req.params.id);
+  saveApps(remaining);
   res.json({ ok: true });
 });
 
