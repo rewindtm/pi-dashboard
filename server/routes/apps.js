@@ -18,6 +18,42 @@ const saveApps = (apps) => writeJson('apps.json', apps);
 const safeDirName = (name) => name.replace(/[^a-zA-Z0-9_.-]/g, '_');
 const status = (app) => (running.has(app.id) ? 'running' : 'stopped');
 
+function run(cmd, args, cwd, timeout = 20000) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { cwd, timeout }, (err, stdout, stderr) => {
+      resolve({ ok: !err, stdout: (stdout || '').trim(), stderr: stderr || (err ? err.message : '') });
+    });
+  });
+}
+
+async function getGitInfo(cwd) {
+  const branchRes = await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  const branch = branchRes.ok ? branchRes.stdout : null;
+
+  const logRes = await run('git', ['log', '-1', '--format=%h%x1f%s%x1f%cI'], cwd);
+  let commit = null;
+  if (logRes.ok && logRes.stdout) {
+    const [short, message, date] = logRes.stdout.split('\x1f');
+    commit = { short, message, date };
+  }
+
+  const upstreamRes = await run('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], cwd);
+  const hasUpstream = upstreamRes.ok;
+
+  let ahead = null;
+  let behind = null;
+  if (hasUpstream) {
+    const countRes = await run('git', ['rev-list', '--left-right', '--count', 'HEAD...@{u}'], cwd);
+    if (countRes.ok) {
+      const [a, b] = countRes.stdout.split(/\s+/).map(Number);
+      ahead = a;
+      behind = b;
+    }
+  }
+
+  return { branch, commit, hasUpstream, ahead, behind };
+}
+
 router.get('/', (req, res) => {
   res.json({ apps: getApps().map((a) => ({ ...a, status: status(a) })), root: APPS_ROOT });
 });
@@ -98,6 +134,23 @@ router.post('/:id/stop', (req, res) => {
 router.get('/:id/logs', (req, res) => {
   const entry = running.get(req.params.id);
   res.json({ running: !!entry, logs: entry ? entry.logs.join('') : '' });
+});
+
+router.get('/:id/git', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  res.json(await getGitInfo(path.join(APPS_ROOT, app.dir)));
+});
+
+router.post('/:id/fetch', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  const cwd = path.join(APPS_ROOT, app.dir);
+  const fetchRes = await run('git', ['fetch', '--quiet'], cwd, 60000);
+  if (!fetchRes.ok) return res.status(500).json({ error: 'fetch fallito', detail: fetchRes.stderr });
+  res.json(await getGitInfo(cwd));
 });
 
 router.post('/:id/pull', (req, res) => {

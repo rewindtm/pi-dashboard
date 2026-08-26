@@ -520,6 +520,7 @@ async function loadApps() {
   const d = await res.json();
   githubApps = d.apps || [];
   renderApps();
+  githubApps.forEach((a) => refreshGitInfo(a.id, false));
 }
 
 function renderApps() {
@@ -542,11 +543,13 @@ function renderApps() {
           <span class="text-xs text-gray-500 dark:text-gray-400">${running ? 'in esecuzione' : 'ferma'}</span>
           <div class="ml-auto flex flex-wrap gap-1.5">
             ${startBtn}
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Pull</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkAppUpdates('${a.id}')">Controlla aggiornamenti</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Scarica aggiornamenti</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleLogs('${a.id}')">${logsOpen ? 'Nascondi log' : 'Log'}</button>
             <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteApp('${a.id}')">Elimina</button>
           </div>
         </div>
+        <div id="gitinfo-${a.id}" class="flex flex-wrap items-center gap-2">${gitInfoHtml(a.id)}</div>
         <div class="flex flex-wrap items-center gap-2">
           <input id="cmd-${a.id}" class="input max-w-md" placeholder="comando di avvio, es. npm start" value="${(a.startCommand || '').replace(/"/g, '&quot;')}" />
           <button class="btn-secondary !px-2 !py-1 text-xs" onclick="saveStartCommand('${a.id}')">Salva comando</button>
@@ -556,6 +559,45 @@ function renderApps() {
     })
     .join('');
   if (openLogsFor.size) refreshOpenLogs();
+}
+
+// --- Info git (branch, ultimo commit, aggiornamenti disponibili) ---
+const gitInfoCache = {};
+
+function gitInfoHtml(id) {
+  const info = gitInfoCache[id];
+  if (!info) return '<span class="text-xs text-gray-500 dark:text-gray-400">Verifica repo locale...</span>';
+  if (info.error) return `<span class="text-xs text-red-500">${info.error}</span>`;
+  const parts = [];
+  if (info.branch) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400">branch <b class="text-gray-700 dark:text-gray-200">${info.branch}</b></span>`);
+  if (info.commit) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400" title="${info.commit.date}">${info.commit.short} — ${info.commit.message}</span>`);
+  if (info.hasUpstream && info.behind > 0) {
+    parts.push(`<span class="badge bg-accent/15 text-accent">${info.behind} aggiornament${info.behind > 1 ? 'i' : 'o'} disponibil${info.behind > 1 ? 'i' : 'e'}</span>`);
+  } else if (info.hasUpstream) {
+    parts.push('<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">aggiornata</span>');
+  }
+  return parts.join(' ');
+}
+
+async function refreshGitInfo(id, doFetch) {
+  try {
+    const res = await fetch('/api/apps/' + id + (doFetch ? '/fetch' : '/git'), {
+      method: doFetch ? 'POST' : 'GET',
+      headers: authHeaders(),
+    });
+    const d = await res.json();
+    gitInfoCache[id] = res.ok ? d : { error: d.error || 'errore' };
+  } catch (err) {
+    gitInfoCache[id] = { error: err.message };
+  }
+  const el = document.getElementById('gitinfo-' + id);
+  if (el) el.innerHTML = gitInfoHtml(id);
+}
+
+function checkAppUpdates(id) {
+  const el = document.getElementById('gitinfo-' + id);
+  if (el) el.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">Controllo aggiornamenti su GitHub...</span>';
+  refreshGitInfo(id, true);
 }
 
 async function saveStartCommand(id) {
@@ -585,12 +627,14 @@ async function pullApp(id) {
   const res = await fetch('/api/apps/' + id + '/pull', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
   alert(d.ok ? 'Aggiornata dall\'ultima versione su GitHub' : 'Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+  refreshGitInfo(id, false);
 }
 
 async function deleteApp(id) {
   if (!confirm('Eliminare la app e la cartella clonata? Non è reversibile.')) return;
   await fetch('/api/apps/' + id, { method: 'DELETE', headers: authHeaders() });
   openLogsFor.delete(id);
+  delete gitInfoCache[id];
   await loadApps();
   renderRepos();
 }
