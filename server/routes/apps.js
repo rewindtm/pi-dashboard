@@ -115,10 +115,26 @@ router.post('/clone', express.json(), (req, res) => {
 
   execFile('git', ['clone', authUrl, target], { timeout: 120000 }, (err, stdout, stderr) => {
     if (err) return res.status(500).json({ error: 'clone fallito', detail: stderr || err.message });
+
+    // Se il repo fornisce un template di .env, copialo come punto di partenza:
+    // .env è quasi sempre gitignorato, quindi non arriva mai col clone.
+    let envSeeded = null;
+    for (const candidate of ['.env.example', '.env.sample']) {
+      const src = path.join(target, candidate);
+      const dst = path.join(target, '.env');
+      if (fs.existsSync(src) && !fs.existsSync(dst)) {
+        try {
+          fs.copyFileSync(src, dst);
+          envSeeded = candidate;
+        } catch {}
+        break;
+      }
+    }
+
     const app = { id: dirName, fullName, dir: dirName, cloneUrl, startCommand: '', pid: null, createdAt: new Date().toISOString() };
     apps.push(app);
     saveApps(apps);
-    res.json({ ok: true, app });
+    res.json({ ok: true, app, envSeeded });
   });
 });
 

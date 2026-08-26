@@ -515,6 +515,7 @@ async function cloneRepo(fullName, cloneUrl) {
   if (!res.ok) return alert('Errore clone: ' + (d.error || d.detail || 'sconosciuto'));
   await loadApps();
   renderRepos();
+  if (d.envSeeded) alert(`Clonata. Trovato ${d.envSeeded}: copiato come .env, puoi modificarlo da "Gestisci".`);
 }
 
 async function loadApps() {
