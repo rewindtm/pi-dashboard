@@ -543,6 +543,7 @@ function renderApps() {
           <span class="text-xs text-gray-500 dark:text-gray-400">${running ? 'in esecuzione' : 'ferma'}</span>
           <div class="ml-auto flex flex-wrap gap-1.5">
             ${startBtn}
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${a.id}')">Gestisci</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkAppUpdates('${a.id}')">Controlla aggiornamenti</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Scarica aggiornamenti</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleLogs('${a.id}')">${logsOpen ? 'Nascondi log' : 'Log'}</button>
@@ -658,6 +659,60 @@ async function refreshOpenLogs() {
     } catch {}
   }
   if (openLogsFor.size) logsTimer = setTimeout(refreshOpenLogs, 2000);
+}
+
+// --- Pagina dedicata per gestire una app clonata (.env, git, log) ---
+let currentAppDetailId = null;
+
+async function openAppDetail(id) {
+  currentAppDetailId = id;
+  const app = githubApps.find((a) => a.id === id);
+  document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
+  document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
+  document.getElementById('app-detail-view').classList.remove('hidden');
+  document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
+  loadAppEnv();
+  await refreshGitInfo(id, false);
+  if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
+}
+
+function closeAppDetail() {
+  currentAppDetailId = null;
+  document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
+  document.getElementById('github-view').classList.remove('hidden');
+}
+
+async function loadAppEnv() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const out = document.getElementById('app-detail-env-out');
+  out.textContent = 'Caricamento...';
+  try {
+    const res = await fetch('/api/apps/' + id + '/env', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    if (currentAppDetailId === id) {
+      document.getElementById('app-detail-env').value = d.content;
+      out.textContent = '';
+    }
+  } catch (err) {
+    out.textContent = 'Errore: ' + err.message;
+  }
+}
+
+async function saveAppEnv() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const content = document.getElementById('app-detail-env').value;
+  const out = document.getElementById('app-detail-env-out');
+  out.textContent = 'Salvataggio...';
+  const res = await fetch('/api/apps/' + id + '/env', {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  const d = await res.json();
+  out.textContent = res.ok ? 'Salvato' : 'Errore: ' + (d.error || 'sconosciuto');
 }
 
 if (TOKEN) {

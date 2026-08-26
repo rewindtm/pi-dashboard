@@ -260,6 +260,26 @@
         </div>
       </div>
 
+      <div id="app-detail-view" class="view hidden space-y-4">
+        <div class="flex items-center gap-2">
+          <button class="icon-btn" onclick="closeAppDetail()" aria-label="Torna a GitHub">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
+          </button>
+          <h2 id="app-detail-title" class="text-lg font-semibold"></h2>
+        </div>
+        <div id="app-detail-git" class="card text-sm"></div>
+        <div class="card space-y-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">File .env</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Variabili d'ambiente dell'app, lette all'avvio (es. da <code>dotenv</code>). Le modifiche hanno effetto al prossimo avvio.</p>
+          <textarea id="app-detail-env" placeholder="CHIAVE=valore" class="h-56 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn" onclick="saveAppEnv()">Salva .env</button>
+            <button class="btn-secondary" onclick="loadAppEnv()">Ricarica</button>
+          </div>
+          <div id="app-detail-env-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
+        </div>
+      </div>
+
       <div id="services-view" class="view hidden space-y-3">
         <div>
           <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>

@@ -163,6 +163,31 @@ router.post('/:id/pull', (req, res) => {
   });
 });
 
+router.get('/:id/env', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    const content = await fs.promises.readFile(path.join(APPS_ROOT, app.dir, '.env'), 'utf8');
+    res.json({ content });
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.json({ content: '' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id/env', express.json({ limit: '256kb' }), async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    await fs.promises.writeFile(path.join(APPS_ROOT, app.dir, '.env'), req.body.content ?? '', 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   const apps = getApps();
   const idx = apps.findIndex((a) => a.id === req.params.id);
