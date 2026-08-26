@@ -29,18 +29,24 @@ EOF
   echo "Creato .env con un token generato automaticamente."
 fi
 
-echo "== Configurazione permessi sudo senza password (systemctl, apt, reboot/shutdown) =="
+echo "== Configurazione permessi sudo senza password (systemctl, apt, reboot/shutdown, config tunnel Cloudflare) =="
 SUDOERS_FILE="/etc/sudoers.d/pi-dashboard"
-if [ ! -f "$SUDOERS_FILE" ]; then
-  cat <<EOF | sudo tee "$SUDOERS_FILE" > /dev/null
+SUDOERS_TMP="$(mktemp)"
+cat <<EOF > "$SUDOERS_TMP"
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get update -qq
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get upgrade -y
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/reboot
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/shutdown now
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee /etc/cloudflared/config.yml
 EOF
+if sudo visudo -cf "$SUDOERS_TMP" > /dev/null; then
+  sudo cp "$SUDOERS_TMP" "$SUDOERS_FILE"
   sudo chmod 440 "$SUDOERS_FILE"
+else
+  echo "ATTENZIONE: file sudoers generato non valido, permessi non aggiornati" >&2
 fi
+rm -f "$SUDOERS_TMP"
 
 echo "== Permesso per gestire il WiFi tramite nmcli =="
 sudo usermod -aG netdev "$SERVICE_USER" || true

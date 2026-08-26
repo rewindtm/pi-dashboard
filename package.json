@@ -12,6 +12,7 @@
     "dotenv": "^16.6.1",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
+    "js-yaml": "^5.4.0",
     "node-pty": "^1.0.0",
     "systeminformation": "^5.23.5",
     "ws": "^8.18.0"

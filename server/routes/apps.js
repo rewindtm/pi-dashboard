@@ -18,6 +18,17 @@ const saveApps = (apps) => writeJson('apps.json', apps);
 const safeDirName = (name) => name.replace(/[^a-zA-Z0-9_.-]/g, '_');
 const status = (app) => (running.has(app.id) ? 'running' : 'stopped');
 
+// Variabili impostate nel .env della dashboard che non devono trapelare nel processo
+// figlio: se l'app usa dotenv, questo di default non sovrascrive variabili già presenti
+// nell'ambiente, quindi ad es. il PORT della dashboard vincerebbe su quello del suo .env.
+const DASHBOARD_ENV_KEYS = ['PORT', 'DASHBOARD_TOKEN', 'APPS_ROOT', 'CLOUDFLARED_CONFIG', 'FILES_ROOT'];
+
+function childEnv() {
+  const env = { ...process.env };
+  for (const key of DASHBOARD_ENV_KEYS) delete env[key];
+  return env;
+}
+
 function run(cmd, args, cwd, timeout = 20000) {
   return new Promise((resolve) => {
     execFile(cmd, args, { cwd, timeout }, (err, stdout, stderr) => {
@@ -97,7 +108,7 @@ function startProcess(app) {
   if (!app.startCommand) return { ok: false, status: 400, error: 'imposta prima un comando di avvio' };
 
   const cwd = path.join(APPS_ROOT, app.dir);
-  const proc = spawn(app.startCommand, { shell: true, cwd, detached: true });
+  const proc = spawn(app.startCommand, { shell: true, cwd, detached: true, env: childEnv() });
   const entry = { proc, logs: [], startedAt: Date.now() };
   running.set(app.id, entry);
 

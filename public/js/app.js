@@ -62,6 +62,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     if (btn.dataset.view === 'wifi-view') loadWifi();
     if (btn.dataset.view === 'updates-view') resetUpdatesView();
     if (btn.dataset.view === 'github-view') loadGithubStatus();
+    if (btn.dataset.view === 'tunnel-view') loadTunnel();
     if (btn.dataset.view === 'terminal-view' && window.fitAddon) setTimeout(() => window.fitAddon.fit(), 50);
   });
 });
@@ -819,6 +820,101 @@ async function saveAppEnv() {
   });
   const d = await res.json();
   out.textContent = res.ok ? 'Salvato' : 'Errore: ' + (d.error || 'sconosciuto');
+}
+
+// --- Tunnel Cloudflare ---
+let tunnelRules = [];
+let tunnelMeta = {};
+
+async function loadTunnel() {
+  loadTunnelStatus();
+  const rulesOut = document.getElementById('tunnel-rules-out');
+  rulesOut.textContent = '';
+  try {
+    const res = await fetch('/api/tunnel/rules', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    tunnelRules = d.rules || [];
+    tunnelMeta = { tunnel: d.tunnel, credentialsFile: d.credentialsFile };
+    renderTunnelRules();
+    document.getElementById('tunnel-meta').innerHTML =
+      `Tunnel ID: <span class="font-mono">${tunnelMeta.tunnel || 'n/d'}</span><br>` +
+      `File credenziali: <span class="font-mono">${tunnelMeta.credentialsFile || 'n/d'}</span>`;
+  } catch (err) {
+    document.getElementById('tunnel-rules').innerHTML = '';
+    rulesOut.textContent = 'Errore: ' + err.message;
+  }
+}
+
+async function loadTunnelStatus() {
+  const dot = document.getElementById('tunnel-status-dot');
+  const text = document.getElementById('tunnel-status-text');
+  try {
+    const res = await fetch('/api/tunnel/status', { headers: authHeaders() });
+    const d = await res.json();
+    if (!d.installed) {
+      dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400';
+      text.textContent = 'cloudflared non è installato su questo Pi';
+      return;
+    }
+    dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full ' + (d.active ? 'bg-green-500' : 'bg-red-500');
+    text.textContent = d.active ? 'Tunnel attivo' : 'Tunnel non attivo';
+  } catch (err) {
+    dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400';
+    text.textContent = 'Errore: ' + err.message;
+  }
+}
+
+function renderTunnelRules() {
+  const container = document.getElementById('tunnel-rules');
+  if (!tunnelRules.length) {
+    container.innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Nessuna regola. Aggiungine una.</div>';
+    return;
+  }
+  container.innerHTML = tunnelRules
+    .map(
+      (r, i) => `<div class="flex flex-wrap items-center gap-2">
+        <input class="input max-w-xs" placeholder="hostname (es. app.tuodominio.dev)" value="${(r.hostname || '').replace(/"/g, '&quot;')}" oninput="tunnelRules[${i}].hostname = this.value" />
+        <input class="input max-w-xs" placeholder="servizio (es. http://localhost:3000)" value="${(r.service || '').replace(/"/g, '&quot;')}" oninput="tunnelRules[${i}].service = this.value" />
+        <button class="btn-danger !px-2 !py-1 text-xs" onclick="removeTunnelRuleRow(${i})">Rimuovi</button>
+      </div>`
+    )
+    .join('');
+}
+
+function addTunnelRuleRow() {
+  tunnelRules.push({ hostname: '', service: '' });
+  renderTunnelRules();
+}
+
+function removeTunnelRuleRow(i) {
+  tunnelRules.splice(i, 1);
+  renderTunnelRules();
+}
+
+async function saveTunnelRules() {
+  const out = document.getElementById('tunnel-rules-out');
+  out.textContent = 'Salvataggio e riavvio del tunnel...';
+  const res = await fetch('/api/tunnel/rules', {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules: tunnelRules }),
+  });
+  const d = await res.json();
+  if (!res.ok) {
+    out.textContent = 'Errore: ' + (d.error || 'sconosciuto');
+    return;
+  }
+  out.textContent = d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '');
+  loadTunnelStatus();
+}
+
+async function restartTunnel() {
+  if (!confirm('Riavviare il tunnel Cloudflare?')) return;
+  const res = await fetch('/api/tunnel/restart', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) alert('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+  loadTunnelStatus();
 }
 
 if (TOKEN) {
