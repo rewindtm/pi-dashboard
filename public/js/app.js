@@ -626,7 +626,7 @@ async function pullApp(id) {
   const res = await fetch('/api/apps/' + id + '/pull', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
   alert(d.ok ? 'Aggiornata dall\'ultima versione su GitHub' : 'Errore: ' + (d.stderr || d.error || 'sconosciuto'));
-  refreshGitInfo(id, false);
+  await refreshGitInfo(id, false);
 }
 
 async function deleteApp(id) {
@@ -659,25 +659,133 @@ async function refreshOpenLogs() {
   if (openLogsFor.size) logsTimer = setTimeout(refreshOpenLogs, 2000);
 }
 
-// --- Pagina dedicata per gestire una app clonata (.env, git, log) ---
+// --- Pagina dedicata per gestire una app clonata (.env, git, processo, log) ---
 let currentAppDetailId = null;
+let detailLogsTimer = null;
 
 async function openAppDetail(id) {
   currentAppDetailId = id;
-  const app = githubApps.find((a) => a.id === id);
-  document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   document.getElementById('app-detail-view').classList.remove('hidden');
+  document.getElementById('app-detail-install-out').textContent = '';
   document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
+
+  await loadApps();
+  if (currentAppDetailId !== id) return;
+  const app = githubApps.find((a) => a.id === id);
+  document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
+  updateDetailProcessUI();
   loadAppEnv();
+
   await refreshGitInfo(id, false);
   if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
 }
 
 function closeAppDetail() {
   currentAppDetailId = null;
+  clearTimeout(detailLogsTimer);
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   document.getElementById('github-view').classList.remove('hidden');
+}
+
+function updateDetailProcessUI() {
+  const app = githubApps.find((a) => a.id === currentAppDetailId);
+  if (!app) return;
+  const running = app.status === 'running';
+  document.getElementById('app-detail-status').innerHTML =
+    `<span class="h-2.5 w-2.5 rounded-full ${running ? 'bg-green-500' : 'bg-gray-400'}"></span>` +
+    `<span class="text-sm text-gray-600 dark:text-gray-300">${running ? 'in esecuzione' : 'ferma'}</span>`;
+  document.getElementById('app-detail-start-btn').classList.toggle('hidden', running);
+  document.getElementById('app-detail-stop-btn').classList.toggle('hidden', !running);
+  document.getElementById('app-detail-restart-btn').classList.toggle('hidden', !running);
+  document.getElementById('app-detail-cmd').value = app.startCommand || '';
+  if (running) refreshDetailLogs();
+  else clearTimeout(detailLogsTimer);
+}
+
+async function saveDetailStartCommand() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const value = document.getElementById('app-detail-cmd').value;
+  await fetch('/api/apps/' + id, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ startCommand: value }),
+  });
+  await loadApps();
+  if (currentAppDetailId === id) updateDetailProcessUI();
+}
+
+async function installApp() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const out = document.getElementById('app-detail-install-out');
+  out.textContent = 'Installazione dipendenze in corso (npm install)...';
+  const res = await fetch('/api/apps/' + id + '/install', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (currentAppDetailId !== id) return;
+  out.textContent = (d.stdout || '') + (d.stderr ? '\n[stderr]\n' + d.stderr : '') + (d.error ? '\nErrore: ' + d.error : '');
+}
+
+async function startDetailApp() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const res = await fetch('/api/apps/' + id + '/start', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) alert('Errore: ' + (d.error || 'sconosciuto'));
+  await loadApps();
+  if (currentAppDetailId === id) updateDetailProcessUI();
+}
+
+async function stopDetailApp() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  await fetch('/api/apps/' + id + '/stop', { method: 'POST', headers: authHeaders() });
+  await loadApps();
+  if (currentAppDetailId === id) updateDetailProcessUI();
+}
+
+async function restartDetailApp() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const res = await fetch('/api/apps/' + id + '/restart', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) alert('Errore: ' + (d.error || 'sconosciuto'));
+  await loadApps();
+  if (currentAppDetailId === id) updateDetailProcessUI();
+}
+
+async function refreshDetailLogs() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  try {
+    const res = await fetch('/api/apps/' + id + '/logs', { headers: authHeaders() });
+    const d = await res.json();
+    if (currentAppDetailId === id) {
+      const el = document.getElementById('app-detail-logs');
+      el.textContent = d.logs || '(nessun output ancora)';
+      el.scrollTop = el.scrollHeight;
+      if (!d.running) return;
+    }
+  } catch {}
+  clearTimeout(detailLogsTimer);
+  if (currentAppDetailId === id) detailLogsTimer = setTimeout(refreshDetailLogs, 2000);
+}
+
+function checkDetailUpdates() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  document.getElementById('app-detail-git').innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">Controllo aggiornamenti su GitHub...</span>';
+  refreshGitInfo(id, true).then(() => {
+    if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
+  });
+}
+
+async function pullDetailApp() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  await pullApp(id);
+  if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
 }
 
 async function loadAppEnv() {

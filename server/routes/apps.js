@@ -92,12 +92,9 @@ router.put('/:id', express.json(), (req, res) => {
   res.json({ ok: true, app });
 });
 
-router.post('/:id/start', (req, res) => {
-  const apps = getApps();
-  const app = apps.find((a) => a.id === req.params.id);
-  if (!app) return res.status(404).json({ error: 'non trovata' });
-  if (!app.startCommand) return res.status(400).json({ error: 'imposta prima un comando di avvio' });
-  if (running.has(app.id)) return res.status(409).json({ error: 'già in esecuzione' });
+function startProcess(app) {
+  if (running.has(app.id)) return { ok: false, status: 409, error: 'già in esecuzione' };
+  if (!app.startCommand) return { ok: false, status: 400, error: 'imposta prima un comando di avvio' };
 
   const cwd = path.join(APPS_ROOT, app.dir);
   const proc = spawn(app.startCommand, { shell: true, cwd, detached: true });
@@ -117,18 +114,62 @@ router.post('/:id/start', (req, res) => {
   });
   proc.unref();
 
-  res.json({ ok: true });
-});
+  return { ok: true };
+}
 
-router.post('/:id/stop', (req, res) => {
-  const entry = running.get(req.params.id);
-  if (!entry) return res.status(404).json({ error: 'non in esecuzione' });
+function stopProcess(id) {
+  const entry = running.get(id);
+  if (!entry) return { ok: false, status: 404, error: 'non in esecuzione' };
   try {
     process.kill(-entry.proc.pid, 'SIGTERM');
   } catch {
     try { entry.proc.kill('SIGTERM'); } catch {}
   }
-  res.json({ ok: true });
+  return { ok: true };
+}
+
+function waitUntilStopped(id, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (!running.has(id) || Date.now() - start > timeoutMs) return resolve();
+      setTimeout(check, 200);
+    };
+    check();
+  });
+}
+
+router.post('/:id/start', (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  const result = startProcess(app);
+  res.status(result.ok ? 200 : result.status).json(result);
+});
+
+router.post('/:id/stop', (req, res) => {
+  const result = stopProcess(req.params.id);
+  res.status(result.ok ? 200 : result.status).json(result);
+});
+
+router.post('/:id/restart', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  stopProcess(app.id);
+  await waitUntilStopped(app.id);
+  const result = startProcess(app);
+  res.status(result.ok ? 200 : result.status).json(result);
+});
+
+router.post('/:id/install', (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  const cwd = path.join(APPS_ROOT, app.dir);
+  execFile('npm', ['install'], { cwd, shell: true, timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    res.status(err ? 500 : 200).json({ ok: !err, stdout, stderr: stderr || (err ? err.message : '') });
+  });
 });
 
 router.get('/:id/logs', (req, res) => {
@@ -193,9 +234,8 @@ router.delete('/:id', async (req, res) => {
   const idx = apps.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'non trovata' });
 
-  const entry = running.get(req.params.id);
-  if (entry) {
-    try { process.kill(-entry.proc.pid, 'SIGTERM'); } catch {}
+  if (running.has(req.params.id)) {
+    stopProcess(req.params.id);
     running.delete(req.params.id);
   }
   try {

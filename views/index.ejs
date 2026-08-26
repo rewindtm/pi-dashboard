@@ -267,7 +267,39 @@
           </button>
           <h2 id="app-detail-title" class="text-lg font-semibold"></h2>
         </div>
-        <div id="app-detail-git" class="card text-sm"></div>
+        <div class="card space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Repository</h3>
+            <div class="flex flex-wrap gap-1.5">
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkDetailUpdates()">Controlla aggiornamenti</button>
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullDetailApp()">Scarica aggiornamenti</button>
+            </div>
+          </div>
+          <div id="app-detail-git" class="text-sm"></div>
+        </div>
+
+        <div class="card space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Processo</h3>
+            <div id="app-detail-status" class="flex items-center gap-1.5"></div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="app-detail-cmd" class="input max-w-md" placeholder="comando di avvio, es. npm start" />
+            <button class="btn-secondary" onclick="saveDetailStartCommand()">Salva comando</button>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn-secondary" onclick="installApp()">Installa dipendenze (npm install)</button>
+            <button id="app-detail-start-btn" class="btn" onclick="startDetailApp()">Avvia</button>
+            <button id="app-detail-stop-btn" class="btn-danger hidden" onclick="stopDetailApp()">Ferma</button>
+            <button id="app-detail-restart-btn" class="btn-secondary hidden" onclick="restartDetailApp()">Riavvia</button>
+          </div>
+          <pre id="app-detail-install-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100 empty:hidden"></pre>
+          <div>
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Log</h4>
+            <pre id="app-detail-logs" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
+          </div>
+        </div>
+
         <div class="card space-y-2">
           <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">File .env</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">Variabili d'ambiente dell'app, lette all'avvio (es. da <code>dotenv</code>). Le modifiche hanno effetto al prossimo avvio.</p>
