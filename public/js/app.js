@@ -591,7 +591,6 @@ async function openAppDetail(id) {
   document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
   updateDetailProcessUI();
   loadAppEnv();
-  refreshDetailSystemStats();
 
   await refreshGitInfo(id, false);
   if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
@@ -605,28 +604,30 @@ function closeAppDetail() {
   document.getElementById('github-view').classList.remove('hidden');
 }
 
-async function refreshDetailSystemStats() {
+async function refreshDetailProcessStats() {
   const id = currentAppDetailId;
   if (!id) return;
   try {
-    const res = await fetch('/api/system/stats', { headers: authHeaders() });
+    const res = await fetch('/api/apps/' + id + '/resources', { headers: authHeaders() });
     const d = await res.json();
-    if (currentAppDetailId === id && res.ok) {
-      const temp = d.cpuTemp && d.cpuTemp.main ? d.cpuTemp.main.toFixed(1) + ' °C' : 'n/d';
-      const ramPct = d.mem.total ? ((d.mem.used / d.mem.total) * 100).toFixed(0) + '%' : 'n/d';
-      const cells = [
-        ['Carico CPU', d.load.currentLoad.toFixed(1) + ' %'],
-        ['RAM', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total) + ' (' + ramPct + ')'],
-        ['Temperatura', temp],
-        ['Uptime', (d.uptime / 3600).toFixed(1) + ' h'],
-      ];
-      document.getElementById('app-detail-sys').innerHTML = cells
-        .map(([k, v]) => `<div><div class="text-xs text-gray-500 dark:text-gray-400">${k}</div><div class="text-sm font-semibold text-gray-800 dark:text-gray-100">${v}</div></div>`)
-        .join('');
+    if (currentAppDetailId === id) {
+      const container = document.getElementById('app-detail-sys');
+      if (!d.running) {
+        container.innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Processo non in esecuzione</div>';
+      } else {
+        const cells = [
+          ['Carico CPU', d.cpu.toFixed(1) + ' %'],
+          ['RAM', fmtBytes(d.memBytes)],
+          ['Processi', String(d.processCount)],
+        ];
+        container.innerHTML = cells
+          .map(([k, v]) => `<div><div class="text-xs text-gray-500 dark:text-gray-400">${k}</div><div class="text-sm font-semibold text-gray-800 dark:text-gray-100">${v}</div></div>`)
+          .join('');
+      }
     }
   } catch {}
   clearTimeout(detailSysTimer);
-  if (currentAppDetailId === id) detailSysTimer = setTimeout(refreshDetailSystemStats, 5000);
+  if (currentAppDetailId === id) detailSysTimer = setTimeout(refreshDetailProcessStats, 5000);
 }
 
 function updateDetailProcessUI() {
@@ -640,8 +641,14 @@ function updateDetailProcessUI() {
   document.getElementById('app-detail-stop-btn').classList.toggle('hidden', !running);
   document.getElementById('app-detail-restart-btn').classList.toggle('hidden', !running);
   document.getElementById('app-detail-cmd').value = app.startCommand || '';
-  if (running) refreshDetailLogs();
-  else clearTimeout(detailLogsTimer);
+  if (running) {
+    refreshDetailLogs();
+    refreshDetailProcessStats();
+  } else {
+    clearTimeout(detailLogsTimer);
+    clearTimeout(detailSysTimer);
+    document.getElementById('app-detail-sys').innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Processo non in esecuzione</div>';
+  }
 }
 
 async function saveDetailStartCommand() {

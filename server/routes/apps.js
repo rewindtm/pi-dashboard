@@ -183,6 +183,33 @@ router.post('/:id/install', (req, res) => {
   });
 });
 
+router.get('/:id/resources', async (req, res) => {
+  const entry = running.get(req.params.id);
+  if (!entry) return res.json({ running: false });
+
+  // Somma CPU/RAM di tutto l'albero di processi del gruppo (il processo è avviato
+  // con detached:true, quindi il suo pid è anche il pgid dell'intero albero).
+  const psRes = await run('ps', ['-e', '-o', 'pid=,pgid=,pcpu=,rss='], null, 5000);
+  if (!psRes.ok) return res.status(500).json({ error: 'ps non disponibile', detail: psRes.stderr });
+
+  const pgid = entry.proc.pid;
+  let cpu = 0;
+  let memKb = 0;
+  let procCount = 0;
+  for (const line of psRes.stdout.split('\n')) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 4) continue;
+    const [, rowPgid, rowCpu, rowRss] = parts;
+    if (Number(rowPgid) === pgid) {
+      cpu += Number(rowCpu) || 0;
+      memKb += Number(rowRss) || 0;
+      procCount++;
+    }
+  }
+
+  res.json({ running: true, pid: pgid, processCount: procCount, cpu, memBytes: memKb * 1024 });
+});
+
 router.get('/:id/logs', (req, res) => {
   const entry = running.get(req.params.id);
   res.json({ running: !!entry, logs: entry ? entry.logs.join('') : '' });
