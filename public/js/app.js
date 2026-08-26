@@ -478,16 +478,15 @@ async function loadRepos() {
 function renderRepos() {
   const filter = (document.getElementById('repos-filter').value || '').toLowerCase();
   const tbody = document.querySelector('#repos-table tbody');
-  const clonedNames = new Set(githubApps.map((a) => a.fullName));
   const rows = githubRepos
     .filter((r) => r.fullName.toLowerCase().includes(filter))
     .map((r) => {
-      const cloned = clonedNames.has(r.fullName);
+      const clonedApp = githubApps.find((a) => a.fullName === r.fullName);
       const visBadge = r.private
         ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">privata</span>'
         : '<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">pubblica</span>';
-      const action = cloned
-        ? '<span class="text-xs text-gray-500 dark:text-gray-400">già clonata</span>'
+      const action = clonedApp
+        ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${clonedApp.id}')">Gestisci</button>`
         : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo('${r.fullName}','${r.cloneUrl}')">Clona</button>`;
       return `<tr>
         <td>
@@ -543,7 +542,6 @@ function renderApps() {
           <span class="text-xs text-gray-500 dark:text-gray-400">${running ? 'in esecuzione' : 'ferma'}</span>
           <div class="ml-auto flex flex-wrap gap-1.5">
             ${startBtn}
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${a.id}')">Gestisci</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkAppUpdates('${a.id}')">Controlla aggiornamenti</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Scarica aggiornamenti</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleLogs('${a.id}')">${logsOpen ? 'Nascondi log' : 'Log'}</button>
