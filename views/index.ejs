@@ -251,15 +251,10 @@
             </div>
             <div class="card overflow-x-auto !p-0">
               <table id="repos-table" class="table-base">
-                <thead><tr><th>Repo</th><th>Aggiornata</th><th>Visibilità</th><th>Azioni</th></tr></thead>
+                <thead><tr><th>Repo</th><th>Aggiornata</th><th>Visibilità</th><th>Stato</th><th>Azioni</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
-          </div>
-
-          <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">App installate</h3>
-            <div id="apps-list" class="space-y-2"></div>
           </div>
         </div>
       </div>
@@ -295,8 +290,17 @@
           <button class="icon-btn" onclick="closeAppDetail()" aria-label="Torna a GitHub">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
           </button>
-          <h2 id="app-detail-title" class="text-lg font-semibold"></h2>
+          <h2 id="app-detail-title" class="flex-1 text-lg font-semibold"></h2>
+          <button class="btn-danger !px-3 !py-1.5 text-sm" onclick="deleteApp(currentAppDetailId)">Elimina</button>
         </div>
+
+        <div class="card">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Carico Raspberry Pi</h3>
+          <div id="app-detail-sys" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Caricamento...</div>
+          </div>
+        </div>
+
         <div class="card space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Repository</h3>

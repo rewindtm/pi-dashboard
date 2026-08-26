@@ -414,8 +414,6 @@ async function powerAction(action) {
 // --- GitHub ---
 let githubRepos = [];
 let githubApps = [];
-const openLogsFor = new Set();
-let logsTimer = null;
 
 async function loadGithubStatus() {
   const res = await fetch('/api/github/status', { headers: authHeaders() });
@@ -486,6 +484,9 @@ function renderRepos() {
       const visBadge = r.private
         ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">privata</span>'
         : '<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">pubblica</span>';
+      const statusBadge = clonedApp
+        ? `<span class="badge bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">${clonedApp.status === 'running' ? 'installata · attiva' : 'installata'}</span>`
+        : '<span class="text-xs text-gray-400 dark:text-gray-500">—</span>';
       const action = clonedApp
         ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${clonedApp.id}')">Gestisci</button>`
         : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo('${r.fullName}','${r.cloneUrl}')">Clona</button>`;
@@ -496,11 +497,12 @@ function renderRepos() {
         </td>
         <td>${new Date(r.updatedAt).toLocaleDateString()}</td>
         <td>${visBadge}</td>
+        <td>${statusBadge}</td>
         <td>${action}</td>
       </tr>`;
     })
     .join('');
-  tbody.innerHTML = rows || '<tr><td colspan="4">Nessuna repository trovata</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="5">Nessuna repository trovata</td></tr>';
 }
 
 async function cloneRepo(fullName, cloneUrl) {
@@ -519,46 +521,6 @@ async function loadApps() {
   const res = await fetch('/api/apps', { headers: authHeaders() });
   const d = await res.json();
   githubApps = d.apps || [];
-  renderApps();
-  githubApps.forEach((a) => refreshGitInfo(a.id, false));
-}
-
-function renderApps() {
-  const container = document.getElementById('apps-list');
-  if (!githubApps.length) {
-    container.innerHTML = '<div class="card text-sm text-gray-500 dark:text-gray-400">Nessuna app clonata. Clona una repository qui sopra per iniziare.</div>';
-    return;
-  }
-  container.innerHTML = githubApps
-    .map((a) => {
-      const running = a.status === 'running';
-      const logsOpen = openLogsFor.has(a.id);
-      const startBtn = running
-        ? `<button class="btn-danger !px-2 !py-1 text-xs" onclick="stopApp('${a.id}')">Ferma</button>`
-        : `<button class="btn !px-2 !py-1 text-xs" onclick="startApp('${a.id}')" ${a.startCommand ? '' : 'disabled title="imposta prima un comando"'}>Avvia</button>`;
-      return `<div class="card space-y-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="h-2.5 w-2.5 shrink-0 rounded-full ${running ? 'bg-green-500' : 'bg-gray-400'}"></span>
-          <span class="font-semibold">${a.fullName}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">${running ? 'in esecuzione' : 'ferma'}</span>
-          <div class="ml-auto flex flex-wrap gap-1.5">
-            ${startBtn}
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkAppUpdates('${a.id}')">Controlla aggiornamenti</button>
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullApp('${a.id}')">Scarica aggiornamenti</button>
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleLogs('${a.id}')">${logsOpen ? 'Nascondi log' : 'Log'}</button>
-            <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteApp('${a.id}')">Elimina</button>
-          </div>
-        </div>
-        <div id="gitinfo-${a.id}" class="flex flex-wrap items-center gap-2">${gitInfoHtml(a.id)}</div>
-        <div class="flex flex-wrap items-center gap-2">
-          <input id="cmd-${a.id}" class="input max-w-md" placeholder="comando di avvio, es. npm start" value="${(a.startCommand || '').replace(/"/g, '&quot;')}" />
-          <button class="btn-secondary !px-2 !py-1 text-xs" onclick="saveStartCommand('${a.id}')">Salva comando</button>
-        </div>
-        ${logsOpen ? `<pre id="logs-${a.id}" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>` : ''}
-      </div>`;
-    })
-    .join('');
-  if (openLogsFor.size) refreshOpenLogs();
 }
 
 // --- Info git (branch, ultimo commit, aggiornamenti disponibili) ---
@@ -594,35 +556,6 @@ async function refreshGitInfo(id, doFetch) {
   if (el) el.innerHTML = gitInfoHtml(id);
 }
 
-function checkAppUpdates(id) {
-  const el = document.getElementById('gitinfo-' + id);
-  if (el) el.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">Controllo aggiornamenti su GitHub...</span>';
-  refreshGitInfo(id, true);
-}
-
-async function saveStartCommand(id) {
-  const value = document.getElementById('cmd-' + id).value;
-  await fetch('/api/apps/' + id, {
-    method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ startCommand: value }),
-  });
-  await loadApps();
-}
-
-async function startApp(id) {
-  const res = await fetch('/api/apps/' + id + '/start', { method: 'POST', headers: authHeaders() });
-  const d = await res.json();
-  if (!res.ok) return alert('Errore: ' + (d.error || 'sconosciuto'));
-  openLogsFor.add(id);
-  await loadApps();
-}
-
-async function stopApp(id) {
-  await fetch('/api/apps/' + id + '/stop', { method: 'POST', headers: authHeaders() });
-  await loadApps();
-}
-
 async function pullApp(id) {
   const res = await fetch('/api/apps/' + id + '/pull', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
@@ -631,38 +564,19 @@ async function pullApp(id) {
 }
 
 async function deleteApp(id) {
+  if (!id) return;
   if (!confirm('Eliminare la app e la cartella clonata? Non è reversibile.')) return;
   await fetch('/api/apps/' + id, { method: 'DELETE', headers: authHeaders() });
-  openLogsFor.delete(id);
   delete gitInfoCache[id];
   await loadApps();
   renderRepos();
-}
-
-function toggleLogs(id) {
-  if (openLogsFor.has(id)) openLogsFor.delete(id);
-  else openLogsFor.add(id);
-  renderApps();
-}
-
-async function refreshOpenLogs() {
-  clearTimeout(logsTimer);
-  for (const id of openLogsFor) {
-    const el = document.getElementById('logs-' + id);
-    if (!el) continue;
-    try {
-      const res = await fetch('/api/apps/' + id + '/logs', { headers: authHeaders() });
-      const d = await res.json();
-      el.textContent = d.logs || '(nessun output ancora)';
-      el.scrollTop = el.scrollHeight;
-    } catch {}
-  }
-  if (openLogsFor.size) logsTimer = setTimeout(refreshOpenLogs, 2000);
+  if (currentAppDetailId === id) closeAppDetail();
 }
 
 // --- Pagina dedicata per gestire una app clonata (.env, git, processo, log) ---
 let currentAppDetailId = null;
 let detailLogsTimer = null;
+let detailSysTimer = null;
 
 async function openAppDetail(id) {
   currentAppDetailId = id;
@@ -677,6 +591,7 @@ async function openAppDetail(id) {
   document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
   updateDetailProcessUI();
   loadAppEnv();
+  refreshDetailSystemStats();
 
   await refreshGitInfo(id, false);
   if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
@@ -685,8 +600,33 @@ async function openAppDetail(id) {
 function closeAppDetail() {
   currentAppDetailId = null;
   clearTimeout(detailLogsTimer);
+  clearTimeout(detailSysTimer);
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   document.getElementById('github-view').classList.remove('hidden');
+}
+
+async function refreshDetailSystemStats() {
+  const id = currentAppDetailId;
+  if (!id) return;
+  try {
+    const res = await fetch('/api/system/stats', { headers: authHeaders() });
+    const d = await res.json();
+    if (currentAppDetailId === id && res.ok) {
+      const temp = d.cpuTemp && d.cpuTemp.main ? d.cpuTemp.main.toFixed(1) + ' °C' : 'n/d';
+      const ramPct = d.mem.total ? ((d.mem.used / d.mem.total) * 100).toFixed(0) + '%' : 'n/d';
+      const cells = [
+        ['Carico CPU', d.load.currentLoad.toFixed(1) + ' %'],
+        ['RAM', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total) + ' (' + ramPct + ')'],
+        ['Temperatura', temp],
+        ['Uptime', (d.uptime / 3600).toFixed(1) + ' h'],
+      ];
+      document.getElementById('app-detail-sys').innerHTML = cells
+        .map(([k, v]) => `<div><div class="text-xs text-gray-500 dark:text-gray-400">${k}</div><div class="text-sm font-semibold text-gray-800 dark:text-gray-100">${v}</div></div>`)
+        .join('');
+    }
+  } catch {}
+  clearTimeout(detailSysTimer);
+  if (currentAppDetailId === id) detailSysTimer = setTimeout(refreshDetailSystemStats, 5000);
 }
 
 function updateDetailProcessUI() {
