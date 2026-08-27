@@ -329,7 +329,10 @@
           </div>
           <pre id="app-detail-install-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100 empty:hidden"></pre>
           <div>
-            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Log</h4>
+            <div class="mb-1 flex items-center justify-between">
+              <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Log</h4>
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyDetailLogs(this)">Copia</button>
+            </div>
             <pre id="app-detail-logs" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
           </div>
         </div>

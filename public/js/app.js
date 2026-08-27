@@ -721,6 +721,30 @@ async function refreshDetailLogs() {
   if (currentAppDetailId === id) detailLogsTimer = setTimeout(refreshDetailLogs, 2000);
 }
 
+async function copyDetailLogs(btn) {
+  const text = document.getElementById('app-detail-logs').textContent || '';
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    const original = btn.textContent;
+    btn.textContent = 'Copiato!';
+    setTimeout(() => (btn.textContent = original), 1500);
+  } catch (err) {
+    alert('Impossibile copiare: ' + err.message);
+  }
+}
+
 function checkDetailUpdates() {
   const id = currentAppDetailId;
   if (!id) return;
