@@ -858,7 +858,10 @@ async function saveTunnelRules() {
     out.textContent = 'Errore: ' + (d.error || 'sconosciuto');
     return;
   }
-  out.textContent = d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '');
+  const parts = [d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '')];
+  if (d.dnsCreated && d.dnsCreated.length) parts.push(`Record DNS creati: ${d.dnsCreated.join(', ')}`);
+  if (d.dnsErrors && d.dnsErrors.length) parts.push(`Errore creazione DNS per: ${d.dnsErrors.map((e) => e.hostname).join(', ')}`);
+  out.textContent = parts.join(' — ');
   loadTunnelStatus();
 }
 

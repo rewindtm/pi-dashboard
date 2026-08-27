@@ -93,6 +93,20 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
     return res.status(500).json({ error: 'impossibile leggere ' + CONFIG_PATH, detail: err.message });
   }
 
+  // Solo modificare l'ingress non basta: senza un record DNS che punti a questo tunnel,
+  // Cloudflare non sa instradare l'hostname qui. Crealo per ogni hostname nuovo.
+  const oldHostnames = new Set(base.rules.map((r) => r.hostname));
+  const newHostnames = rules.map((r) => r.hostname.trim()).filter((h) => !oldHostnames.has(h));
+  const dnsErrors = [];
+  if (base.tunnel) {
+    for (const hostname of newHostnames) {
+      const dnsRes = await run('cloudflared', ['tunnel', 'route', 'dns', base.tunnel, hostname], { timeout: 20000 });
+      if (!dnsRes.ok && !/already exists/i.test(dnsRes.stderr)) {
+        dnsErrors.push({ hostname, detail: dnsRes.stderr });
+      }
+    }
+  }
+
   try {
     await writeConfig(base, rules);
   } catch (err) {
@@ -100,7 +114,13 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
   }
 
   const restartRes = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
-  res.json({ ok: true, restarted: restartRes.ok, restartError: restartRes.ok ? null : restartRes.stderr });
+  res.json({
+    ok: true,
+    restarted: restartRes.ok,
+    restartError: restartRes.ok ? null : restartRes.stderr,
+    dnsCreated: newHostnames.filter((h) => !dnsErrors.some((e) => e.hostname === h)),
+    dnsErrors,
+  });
 });
 
 router.post('/restart', async (req, res) => {
