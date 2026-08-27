@@ -99,12 +99,12 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
     return res.status(500).json({ error: 'scrittura configurazione fallita', detail: err.message });
   }
 
-  const restartRes = await run('sudo', ['systemctl', 'restart', 'cloudflared']);
+  const restartRes = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
   res.json({ ok: true, restarted: restartRes.ok, restartError: restartRes.ok ? null : restartRes.stderr });
 });
 
 router.post('/restart', async (req, res) => {
-  const result = await run('sudo', ['systemctl', 'restart', 'cloudflared']);
+  const result = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
   res.status(result.ok ? 200 : 500).json(result);
 });
 
