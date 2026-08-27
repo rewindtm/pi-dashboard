@@ -29,16 +29,18 @@ EOF
   echo "Creato .env con un token generato automaticamente."
 fi
 
-echo "== Configurazione permessi sudo senza password (systemctl, apt, reboot/shutdown, config tunnel Cloudflare) =="
+echo "== Configurazione permessi sudo senza password (systemctl, apt, reboot/shutdown, config tunnel Cloudflare, PostgreSQL) =="
 SUDOERS_FILE="/etc/sudoers.d/pi-dashboard"
 SUDOERS_TMP="$(mktemp)"
 cat <<EOF > "$SUDOERS_TMP"
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get update -qq
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get upgrade -y
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/apt-get install -y postgresql
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/reboot
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/shutdown now
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee /etc/cloudflared/config.yml
+$SERVICE_USER ALL=(postgres) NOPASSWD: /usr/bin/psql
 EOF
 if sudo visudo -cf "$SUDOERS_TMP" > /dev/null; then
   sudo cp "$SUDOERS_TMP" "$SUDOERS_FILE"

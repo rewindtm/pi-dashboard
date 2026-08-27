@@ -63,6 +63,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     if (btn.dataset.view === 'updates-view') resetUpdatesView();
     if (btn.dataset.view === 'github-view') loadGithubStatus();
     if (btn.dataset.view === 'tunnel-view') loadTunnel();
+    if (btn.dataset.view === 'db-view') loadDbView();
     if (btn.dataset.view === 'terminal-view' && window.fitAddon) setTimeout(() => window.fitAddon.fit(), 50);
   });
 });
@@ -721,28 +722,8 @@ async function refreshDetailLogs() {
   if (currentAppDetailId === id) detailLogsTimer = setTimeout(refreshDetailLogs, 2000);
 }
 
-async function copyDetailLogs(btn) {
-  const text = document.getElementById('app-detail-logs').textContent || '';
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-    const original = btn.textContent;
-    btn.textContent = 'Copiato!';
-    setTimeout(() => (btn.textContent = original), 1500);
-  } catch (err) {
-    alert('Impossibile copiare: ' + err.message);
-  }
+function copyDetailLogs(btn) {
+  copyText(document.getElementById('app-detail-logs').textContent || '', btn);
 }
 
 function checkDetailUpdates() {
@@ -887,6 +868,114 @@ async function restartTunnel() {
   const d = await res.json();
   if (!res.ok) alert('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
   loadTunnelStatus();
+}
+
+// --- Database ---
+async function loadDbView() {
+  const res = await fetch('/api/db/status', { headers: authHeaders() });
+  const d = await res.json();
+  document.getElementById('db-not-installed').classList.toggle('hidden', d.installed);
+  document.getElementById('db-installed').classList.toggle('hidden', !d.installed);
+  if (!d.installed) return;
+
+  const dot = document.getElementById('db-status-dot');
+  const text = document.getElementById('db-status-text');
+  dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full ' + (d.active ? 'bg-green-500' : 'bg-red-500');
+  text.textContent = d.active ? 'PostgreSQL attivo' : 'PostgreSQL non attivo';
+
+  const appSelect = document.getElementById('db-new-app');
+  appSelect.innerHTML = '<option value="">— per quale app (opzionale) —</option>' +
+    githubApps.map((a) => `<option value="${a.fullName}">${a.fullName}</option>`).join('');
+
+  loadDatabases();
+}
+
+async function installPostgres() {
+  const out = document.getElementById('db-install-out');
+  out.textContent = 'Installazione in corso, può richiedere qualche minuto...';
+  const res = await fetch('/api/db/install', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) {
+    out.textContent = 'Errore: ' + (d.detail || d.error || 'sconosciuto');
+    return;
+  }
+  out.textContent = '';
+  loadDbView();
+}
+
+async function loadDatabases() {
+  const tbody = document.querySelector('#db-table tbody');
+  tbody.innerHTML = '<tr><td colspan="4">Caricamento...</td></tr>';
+  try {
+    const res = await fetch('/api/db', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    tbody.innerHTML = d.databases
+      .map(
+        (db) => `<tr>
+          <td>${db.dbName}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
+          <td>${db.forApp || '—'}</td>
+          <td>
+            <code class="text-xs">${'•'.repeat(12)}</code>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionString.replace(/'/g, "\\'")}', this)">Copia</button>
+          </td>
+          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteDatabase('${db.dbName}')">Elimina</button></td>
+        </tr>`
+      )
+      .join('') || '<tr><td colspan="4">Nessun database creato dalla dashboard</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+  }
+}
+
+async function createDatabase() {
+  const name = document.getElementById('db-new-name').value.trim();
+  const forApp = document.getElementById('db-new-app').value || null;
+  const out = document.getElementById('db-create-out');
+  if (!name) return;
+  out.textContent = 'Creazione in corso...';
+  const res = await fetch('/api/db/create', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, forApp }),
+  });
+  const d = await res.json();
+  if (!res.ok) {
+    out.textContent = 'Errore: ' + (d.detail || d.error || 'sconosciuto');
+    return;
+  }
+  document.getElementById('db-new-name').value = '';
+  out.textContent = 'Creato. Connection string: ' + d.database.connectionString;
+  loadDatabases();
+}
+
+async function deleteDatabase(name) {
+  if (!confirm(`Eliminare il database e l'utente "${name}"? Non è reversibile.`)) return;
+  await fetch('/api/db/' + encodeURIComponent(name), { method: 'DELETE', headers: authHeaders() });
+  loadDatabases();
+}
+
+async function copyText(text, btn) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    const original = btn.textContent;
+    btn.textContent = 'Copiato!';
+    setTimeout(() => (btn.textContent = original), 1500);
+  } catch (err) {
+    alert('Impossibile copiare: ' + err.message);
+  }
 }
 
 if (TOKEN) {

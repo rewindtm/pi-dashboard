@@ -16,6 +16,7 @@ const powerRoutes = require('./routes/power');
 const githubRoutes = require('./routes/github');
 const appsRoutes = require('./routes/apps');
 const tunnelRoutes = require('./routes/tunnel');
+const dbRoutes = require('./routes/db');
 
 if (!process.env.DASHBOARD_TOKEN) {
   console.error('DASHBOARD_TOKEN non impostato. Copia .env.example in .env e imposta un token.');
@@ -45,6 +46,7 @@ app.use('/api/power', httpAuth, powerRoutes);
 app.use('/api/github', httpAuth, githubRoutes);
 app.use('/api/apps', httpAuth, appsRoutes);
 app.use('/api/tunnel', httpAuth, tunnelRoutes);
+app.use('/api/db', httpAuth, dbRoutes);
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws/terminal' });
