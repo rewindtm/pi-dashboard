@@ -80,6 +80,37 @@ router.post('/create', express.json(), async (req, res) => {
   res.json({ ok: true, database: record });
 });
 
+router.get('/:name/tables', async (req, res) => {
+  const name = req.params.name;
+  if (!NAME_RE.test(name)) return res.status(400).json({ error: 'nome non valido' });
+
+  const colsRes = await psql([
+    '-d', name, '-tAc',
+    "SELECT table_name || E'\\x1f' || column_name || E'\\x1f' || data_type FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name, ordinal_position;",
+  ]);
+  if (!colsRes.ok) return res.status(500).json({ error: 'connessione al database fallita', detail: colsRes.stderr });
+
+  const columnsByTable = {};
+  for (const line of colsRes.stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const [table, col, type] = line.split('\x1f');
+    if (!columnsByTable[table]) columnsByTable[table] = [];
+    columnsByTable[table].push({ name: col, type });
+  }
+
+  const tables = [];
+  for (const table of Object.keys(columnsByTable)) {
+    const countRes = await psql(['-d', name, '-tAc', `SELECT COUNT(*) FROM "${table}";`]);
+    tables.push({
+      name: table,
+      columns: columnsByTable[table],
+      rowCount: countRes.ok ? Number(countRes.stdout.trim()) : null,
+    });
+  }
+
+  res.json({ tables });
+});
+
 router.delete('/:name', async (req, res) => {
   const name = req.params.name;
   const dbs = getDbs();

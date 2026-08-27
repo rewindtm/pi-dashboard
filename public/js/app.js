@@ -906,6 +906,10 @@ async function installPostgres() {
   loadDbView();
 }
 
+let currentDbs = [];
+const expandedDbTables = new Set();
+const dbTablesCache = {};
+
 async function loadDatabases() {
   const tbody = document.querySelector('#db-table tbody');
   tbody.innerHTML = '<tr><td colspan="4">Caricamento...</td></tr>';
@@ -913,22 +917,68 @@ async function loadDatabases() {
     const res = await fetch('/api/db', { headers: authHeaders() });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'errore');
-    tbody.innerHTML = d.databases
-      .map(
-        (db) => `<tr>
+    currentDbs = d.databases;
+    renderDatabases();
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+  }
+}
+
+function renderDatabases() {
+  const tbody = document.querySelector('#db-table tbody');
+  tbody.innerHTML = currentDbs
+    .map((db) => {
+      const mainRow = `<tr>
           <td>${db.dbName}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
           <td>${db.forApp || '—'}</td>
           <td>
             <code class="text-xs">${'•'.repeat(12)}</code>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionString.replace(/'/g, "\\'")}', this)">Copia</button>
           </td>
-          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteDatabase('${db.dbName}')">Elimina</button></td>
-        </tr>`
-      )
-      .join('') || '<tr><td colspan="4">Nessun database creato dalla dashboard</td></tr>';
-  } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+          <td>
+            ${db.exists ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleDbTables('${db.dbName}')">${expandedDbTables.has(db.dbName) ? 'Nascondi tabelle' : 'Tabelle'}</button>` : ''}
+            <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteDatabase('${db.dbName}')">Elimina</button>
+          </td>
+        </tr>`;
+      const tablesRow = expandedDbTables.has(db.dbName)
+        ? `<tr><td colspan="4">${dbTablesHtml(db.dbName)}</td></tr>`
+        : '';
+      return mainRow + tablesRow;
+    })
+    .join('') || '<tr><td colspan="4">Nessun database creato dalla dashboard</td></tr>';
+}
+
+function dbTablesHtml(dbName) {
+  const tables = dbTablesCache[dbName];
+  if (!tables) return '<span class="text-xs text-gray-500 dark:text-gray-400">Caricamento tabelle...</span>';
+  if (tables.error) return `<span class="text-xs text-red-500">${tables.error}</span>`;
+  if (!tables.length) return '<span class="text-xs text-gray-500 dark:text-gray-400">Nessuna tabella nello schema public</span>';
+  return `<div class="space-y-2">${tables
+    .map(
+      (t) => `<div class="rounded-lg border border-border-light p-2 dark:border-border-dark">
+        <div class="text-sm font-semibold">${t.name} <span class="text-xs font-normal text-gray-500 dark:text-gray-400">(${t.rowCount ?? '?'} righe)</span></div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">${t.columns.map((c) => `${c.name} <span class="text-gray-400 dark:text-gray-500">${c.type}</span>`).join(', ')}</div>
+      </div>`
+    )
+    .join('')}</div>`;
+}
+
+async function toggleDbTables(dbName) {
+  if (expandedDbTables.has(dbName)) {
+    expandedDbTables.delete(dbName);
+    renderDatabases();
+    return;
   }
+  expandedDbTables.add(dbName);
+  renderDatabases();
+  try {
+    const res = await fetch('/api/db/' + encodeURIComponent(dbName) + '/tables', { headers: authHeaders() });
+    const d = await res.json();
+    dbTablesCache[dbName] = res.ok ? d.tables : { error: d.error || 'errore' };
+  } catch (err) {
+    dbTablesCache[dbName] = { error: err.message };
+  }
+  renderDatabases();
 }
 
 async function createDatabase() {
@@ -955,6 +1005,8 @@ async function createDatabase() {
 async function deleteDatabase(name) {
   if (!confirm(`Eliminare il database e l'utente "${name}"? Non è reversibile.`)) return;
   await fetch('/api/db/' + encodeURIComponent(name), { method: 'DELETE', headers: authHeaders() });
+  expandedDbTables.delete(name);
+  delete dbTablesCache[name];
   loadDatabases();
 }
 
