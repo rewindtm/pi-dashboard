@@ -7,6 +7,7 @@ const router = express.Router();
 
 const NAME_RE = /^[a-z][a-z0-9_]{2,62}$/;
 const TAILSCALE_CIDR = '100.64.0.0/10';
+const TAILSCALE_NETWORK = TAILSCALE_CIDR.split('/')[0];
 
 function run(cmd, args, timeout = 20000) {
   return new Promise((resolve) => {
@@ -29,7 +30,9 @@ async function tailscaleIp() {
 }
 
 async function remoteAccessEnabled() {
-  const r = await psql(['-tAc', `SELECT count(*) FROM pg_hba_file_rules WHERE address = '${TAILSCALE_CIDR}';`]);
+  // pg_hba_file_rules splits a CIDR into separate address/netmask columns, so a rule
+  // for 100.64.0.0/10 shows up with address = '100.64.0.0' (no /10 suffix).
+  const r = await psql(['-tAc', `SELECT count(*) FROM pg_hba_file_rules WHERE address = '${TAILSCALE_NETWORK}'::inet;`]);
   return r.ok && Number(r.stdout.trim()) > 0;
 }
 
