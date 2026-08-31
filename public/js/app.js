@@ -886,11 +886,29 @@ async function loadDbView() {
   dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full ' + (d.active ? 'bg-green-500' : 'bg-red-500');
   text.textContent = d.active ? 'PostgreSQL attivo' : 'PostgreSQL non attivo';
 
+  const remoteStatus = document.getElementById('db-remote-status');
+  const remoteBtn = document.getElementById('db-enable-remote-btn');
+  remoteStatus.textContent = d.remoteAccess ? 'Abilitato' : 'Non abilitato';
+  remoteBtn.classList.toggle('hidden', d.remoteAccess);
+
   const appSelect = document.getElementById('db-new-app');
   appSelect.innerHTML = '<option value="">— per quale app (opzionale) —</option>' +
     githubApps.map((a) => `<option value="${a.fullName}">${a.fullName}</option>`).join('');
 
   loadDatabases();
+}
+
+async function enableRemoteAccess() {
+  if (!confirm('PostgreSQL verrà riavviato per applicare la modifica. Continuare?')) return;
+  const status = document.getElementById('db-remote-status');
+  status.textContent = 'Abilitazione in corso...';
+  const res = await fetch('/api/db/enable-remote', { method: 'POST', headers: authHeaders() });
+  const d = await res.json();
+  if (!res.ok) {
+    status.textContent = 'Errore: ' + (d.detail || d.error || 'sconosciuto');
+    return;
+  }
+  loadDbView();
 }
 
 async function installPostgres() {
@@ -931,9 +949,15 @@ function renderDatabases() {
       const mainRow = `<tr>
           <td>${db.dbName}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
           <td>${db.forApp || '—'}</td>
-          <td>
-            <code class="text-xs">${'•'.repeat(12)}</code>
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionString.replace(/'/g, "\\'")}', this)">Copia</button>
+          <td class="space-y-1">
+            <div><code class="text-xs">${'•'.repeat(12)}</code> <span class="text-xs text-gray-500 dark:text-gray-400">locale</span>
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionString.replace(/'/g, "\\'")}', this)">Copia</button>
+            </div>
+            ${db.connectionStringRemote
+              ? `<div><code class="text-xs">${'•'.repeat(12)}</code> <span class="text-xs text-gray-500 dark:text-gray-400">remota (Tailscale)</span>
+                  <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionStringRemote.replace(/'/g, "\\'")}', this)">Copia</button>
+                </div>`
+              : '<div class="text-xs text-gray-400 dark:text-gray-500">remota non disponibile — abilita l\'accesso remoto sopra</div>'}
           </td>
           <td>
             ${db.exists ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleDbTables('${db.dbName}')">${expandedDbTables.has(db.dbName) ? 'Nascondi tabelle' : 'Tabelle'}</button>` : ''}

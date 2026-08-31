@@ -41,6 +41,7 @@ $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/reboot
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/sbin/shutdown now
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee /etc/cloudflared/config.yml
 $SERVICE_USER ALL=(postgres) NOPASSWD: /usr/bin/psql
+$SERVICE_USER ALL=(postgres) NOPASSWD: /usr/bin/tee
 EOF
 if sudo visudo -cf "$SUDOERS_TMP" > /dev/null; then
   sudo cp "$SUDOERS_TMP" "$SUDOERS_FILE"

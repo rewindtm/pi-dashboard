@@ -1,11 +1,12 @@
 const express = require('express');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { readJson, writeJson } = require('../store');
 
 const router = express.Router();
 
 const NAME_RE = /^[a-z][a-z0-9_]{2,62}$/;
+const TAILSCALE_CIDR = '100.64.0.0/10';
 
 function run(cmd, args, timeout = 20000) {
   return new Promise((resolve) => {
@@ -22,11 +23,55 @@ function psql(args, timeout = 20000) {
 const getDbs = () => readJson('databases.json', []);
 const saveDbs = (dbs) => writeJson('databases.json', dbs);
 
+async function tailscaleIp() {
+  const r = await run('tailscale', ['ip', '-4']);
+  return r.ok ? r.stdout.trim() : null;
+}
+
+async function remoteAccessEnabled() {
+  const r = await psql(['-tAc', `SELECT count(*) FROM pg_hba_file_rules WHERE address = '${TAILSCALE_CIDR}';`]);
+  return r.ok && Number(r.stdout.trim()) > 0;
+}
+
+function withRemoteConnectionString(record, remoteHost) {
+  return {
+    ...record,
+    connectionStringRemote: remoteHost ? record.connectionString.replace('@localhost:', `@${remoteHost}:`) : null,
+  };
+}
+
 router.get('/status', async (req, res) => {
   const which = await run('which', ['psql']);
-  if (!which.ok) return res.json({ installed: false, active: false });
+  if (!which.ok) return res.json({ installed: false, active: false, remoteAccess: false });
   const active = await run('systemctl', ['is-active', 'postgresql']);
-  res.json({ installed: true, active: active.stdout === 'active' });
+  const remoteAccess = active.stdout === 'active' ? await remoteAccessEnabled() : false;
+  res.json({ installed: true, active: active.stdout === 'active', remoteAccess });
+});
+
+router.post('/enable-remote', async (req, res) => {
+  if (!(await remoteAccessEnabled())) {
+    const hbaFileRes = await psql(['-tAc', 'SHOW hba_file;']);
+    if (!hbaFileRes.ok) return res.status(500).json({ error: 'impossibile determinare pg_hba.conf', detail: hbaFileRes.stderr });
+    const hbaFile = hbaFileRes.stdout.trim();
+
+    const line = `\nhost    all             all             ${TAILSCALE_CIDR}           scram-sha-256\n`;
+    const appendOk = await new Promise((resolve) => {
+      const proc = spawn('sudo', ['-u', 'postgres', 'tee', '-a', hbaFile], { stdio: ['pipe', 'ignore', 'pipe'] });
+      let stderr = '';
+      proc.stderr.on('data', (d) => (stderr += d.toString()));
+      proc.on('error', () => resolve({ ok: false, stderr: 'impossibile avviare sudo tee' }));
+      proc.on('close', (code) => resolve({ ok: code === 0, stderr }));
+      proc.stdin.write(line);
+      proc.stdin.end();
+    });
+    if (!appendOk.ok) return res.status(500).json({ error: 'scrittura pg_hba.conf fallita', detail: appendOk.stderr });
+  }
+
+  // listen_addresses richiede un riavvio completo (non basta un reload) per essere applicato.
+  const restartRes = await run('sudo', ['systemctl', 'restart', 'postgresql'], { timeout: 30000 });
+  if (!restartRes.ok) return res.status(500).json({ error: 'riavvio PostgreSQL fallito', detail: restartRes.stderr });
+
+  res.json({ ok: true });
 });
 
 router.post('/install', async (req, res) => {
@@ -40,9 +85,11 @@ router.get('/', async (req, res) => {
   const dbs = getDbs();
   const listRes = await psql(['-tAc', 'SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;']);
   const liveNames = listRes.ok ? listRes.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+  const remoteHost = (await remoteAccessEnabled()) ? await tailscaleIp() : null;
   res.json({
-    databases: dbs.map((d) => ({ ...d, exists: liveNames.includes(d.dbName) })),
+    databases: dbs.map((d) => withRemoteConnectionString({ ...d, exists: liveNames.includes(d.dbName) }, remoteHost)),
     postgresReachable: listRes.ok,
+    remoteHost,
   });
 });
 
@@ -77,7 +124,8 @@ router.post('/create', express.json(), async (req, res) => {
   };
   dbs.push(record);
   saveDbs(dbs);
-  res.json({ ok: true, database: record });
+  const remoteHost = (await remoteAccessEnabled()) ? await tailscaleIp() : null;
+  res.json({ ok: true, database: withRemoteConnectionString(record, remoteHost) });
 });
 
 router.get('/:name/tables', async (req, res) => {

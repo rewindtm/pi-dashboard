@@ -305,6 +305,13 @@
           </div>
 
           <div class="card space-y-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Accesso remoto</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Per connettersi ai database da un altro dispositivo sulla tua rete Tailscale (non solo dal Pi stesso). Apre PostgreSQL solo alla rete Tailscale, non a Internet.</p>
+            <div id="db-remote-status" class="text-sm"></div>
+            <button id="db-enable-remote-btn" class="btn hidden" onclick="enableRemoteAccess()">Abilita accesso remoto</button>
+          </div>
+
+          <div class="card space-y-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Nuovo database</h3>
             <div class="flex flex-wrap items-center gap-2">
               <input id="db-new-name" class="input max-w-xs" placeholder="nome (es. fantafede)" />
