@@ -942,11 +942,25 @@ async function saveTunnelRules() {
     out.textContent = 'Errore: ' + (d.error || 'sconosciuto');
     return;
   }
-  const parts = [d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '')];
-  if (d.dnsCreated && d.dnsCreated.length) parts.push(`Record DNS creati: ${d.dnsCreated.join(', ')}`);
-  if (d.dnsErrors && d.dnsErrors.length) parts.push(`Errore creazione DNS per: ${d.dnsErrors.map((e) => e.hostname).join(', ')}`);
-  out.textContent = parts.join(' — ');
+  out.textContent = d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '');
   loadTunnelStatus();
+
+  if (d.newHostnames && d.newHostnames.length) {
+    out.textContent += ` — creazione record DNS per: ${d.newHostnames.join(', ')}...`;
+    const dnsRes = await fetch('/api/tunnel/rules/dns', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tunnel: d.tunnel, hostnames: d.newHostnames }),
+    });
+    const dnsData = await dnsRes.json();
+    const results = dnsData.results || [];
+    const ok = results.filter((r) => r.ok).map((r) => r.hostname);
+    const failed = results.filter((r) => !r.ok);
+    let dnsMsg = '';
+    if (ok.length) dnsMsg += ` DNS creato per: ${ok.join(', ')}.`;
+    if (failed.length) dnsMsg += ` Errore DNS per: ${failed.map((r) => r.hostname + ' (' + r.error + ')').join(', ')}.`;
+    out.textContent = out.textContent.replace(/ — creazione record DNS.*$/, '') + dnsMsg;
+  }
 }
 
 async function restartTunnel() {

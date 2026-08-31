@@ -93,19 +93,8 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
     return res.status(500).json({ error: 'impossibile leggere ' + CONFIG_PATH, detail: err.message });
   }
 
-  // Solo modificare l'ingress non basta: senza un record DNS che punti a questo tunnel,
-  // Cloudflare non sa instradare l'hostname qui. Crealo per ogni hostname nuovo.
   const oldHostnames = new Set(base.rules.map((r) => r.hostname));
   const newHostnames = rules.map((r) => r.hostname.trim()).filter((h) => !oldHostnames.has(h));
-  const dnsErrors = [];
-  if (base.tunnel) {
-    for (const hostname of newHostnames) {
-      const dnsRes = await run('cloudflared', ['tunnel', 'route', 'dns', base.tunnel, hostname], { timeout: 20000 });
-      if (!dnsRes.ok && !/already exists/i.test(dnsRes.stderr)) {
-        dnsErrors.push({ hostname, detail: dnsRes.stderr });
-      }
-    }
-  }
 
   try {
     await writeConfig(base, rules);
@@ -114,13 +103,29 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
   }
 
   const restartRes = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
+  // La creazione dei record DNS per gli hostname nuovi è un passo separato (POST /rules/dns):
+  // può richiedere qualche secondo per ognuno, e non deve far sembrare bloccato il salvataggio.
   res.json({
     ok: true,
     restarted: restartRes.ok,
     restartError: restartRes.ok ? null : restartRes.stderr,
-    dnsCreated: newHostnames.filter((h) => !dnsErrors.some((e) => e.hostname === h)),
-    dnsErrors,
+    newHostnames,
+    tunnel: base.tunnel,
   });
+});
+
+router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
+  const hostnames = Array.isArray(req.body && req.body.hostnames) ? req.body.hostnames : [];
+  const tunnel = req.body && req.body.tunnel;
+  if (!tunnel || !hostnames.length) return res.json({ results: [] });
+
+  const results = [];
+  for (const hostname of hostnames) {
+    const dnsRes = await run('cloudflared', ['tunnel', 'route', 'dns', tunnel, hostname], { timeout: 20000 });
+    const ok = dnsRes.ok || /already exists/i.test(dnsRes.stderr);
+    results.push({ hostname, ok, error: ok ? null : dnsRes.stderr });
+  }
+  res.json({ results });
 });
 
 router.post('/restart', async (req, res) => {
