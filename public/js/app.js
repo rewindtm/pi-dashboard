@@ -586,6 +586,8 @@ async function openAppDetail(id) {
   document.getElementById('app-detail-view').classList.remove('hidden');
   document.getElementById('app-detail-install-out').textContent = '';
   document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
+  document.getElementById('app-detail-logs').textContent = '';
+  document.getElementById('app-detail-sys').innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Caricamento...</div>';
 
   await loadApps();
   if (currentAppDetailId !== id) return;
@@ -653,6 +655,7 @@ function updateDetailProcessUI() {
     clearTimeout(detailLogsTimer);
     clearTimeout(detailSysTimer);
     document.getElementById('app-detail-sys').innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Processo non in esecuzione</div>';
+    document.getElementById('app-detail-logs').textContent = '(processo non in esecuzione)';
   }
 }
 
