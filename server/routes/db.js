@@ -30,9 +30,10 @@ async function tailscaleIp() {
 }
 
 async function remoteAccessEnabled() {
-  // pg_hba_file_rules splits a CIDR into separate address/netmask columns, so a rule
-  // for 100.64.0.0/10 shows up with address = '100.64.0.0' (no /10 suffix).
-  const r = await psql(['-tAc', `SELECT count(*) FROM pg_hba_file_rules WHERE address = '${TAILSCALE_NETWORK}'::inet;`]);
+  // pg_hba_file_rules splits a CIDR into separate address/netmask columns (both text,
+  // not inet), so a rule for 100.64.0.0/10 shows up as address = '100.64.0.0' with no
+  // /10 suffix and no implicit cast to inet.
+  const r = await psql(['-tAc', `SELECT count(*) FROM pg_hba_file_rules WHERE address = '${TAILSCALE_NETWORK}';`]);
   return r.ok && Number(r.stdout.trim()) > 0;
 }
 
