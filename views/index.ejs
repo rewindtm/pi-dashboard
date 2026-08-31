@@ -392,6 +392,25 @@
           </div>
           <div id="app-detail-env-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
         </div>
+
+        <div class="card space-y-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">File del progetto</h3>
+          <div id="app-detail-files-path" class="text-sm text-gray-500 dark:text-gray-400"></div>
+          <div class="overflow-x-auto">
+            <table class="table-base">
+              <thead><tr><th>Nome</th><th>Dimensione</th></tr></thead>
+              <tbody id="app-detail-files-list"></tbody>
+            </table>
+          </div>
+          <div id="app-detail-file-editor-wrap" class="hidden space-y-2">
+            <div id="app-detail-file-editor-path" class="text-sm font-semibold text-gray-700 dark:text-gray-300"></div>
+            <textarea id="app-detail-file-editor" class="h-64 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
+            <div class="flex flex-wrap items-center gap-2">
+              <button class="btn" onclick="saveAppFile()">Salva file</button>
+              <div id="app-detail-file-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="services-view" class="view hidden space-y-3">

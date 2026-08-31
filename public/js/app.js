@@ -593,6 +593,9 @@ async function openAppDetail(id) {
   document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
   updateDetailProcessUI();
   loadAppEnv();
+  currentAppFile = null;
+  document.getElementById('app-detail-file-editor-wrap').classList.add('hidden');
+  loadAppFiles('');
 
   await refreshGitInfo(id, false);
   if (currentAppDetailId === id) document.getElementById('app-detail-git').innerHTML = gitInfoHtml(id);
@@ -770,6 +773,67 @@ async function saveAppEnv() {
     method: 'PUT',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
+  });
+  const d = await res.json();
+  out.textContent = res.ok ? 'Salvato' : 'Errore: ' + (d.error || 'sconosciuto');
+}
+
+// --- File del progetto (nella pagina di gestione app) ---
+let currentAppFilesDir = '';
+let currentAppFile = null;
+
+async function loadAppFiles(dir) {
+  const id = currentAppDetailId;
+  if (!id) return;
+  currentAppFilesDir = dir;
+  const res = await fetch('/api/apps/' + id + '/files/list?path=' + encodeURIComponent(dir), { headers: authHeaders() });
+  const d = await res.json();
+  if (currentAppDetailId !== id) return;
+  if (!res.ok) {
+    document.getElementById('app-detail-files-path').textContent = 'Errore: ' + (d.error || 'sconosciuto');
+    document.getElementById('app-detail-files-list').innerHTML = '';
+    return;
+  }
+  document.getElementById('app-detail-files-path').textContent = '/' + (d.path || '');
+  const rows = [];
+  if (dir) rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${dir.split('/').slice(0, -1).join('/')}')">..</button></td></tr>`);
+  (d.items || [])
+    .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
+    .forEach((it) => {
+      const p = (dir ? dir + '/' : '') + it.name;
+      if (it.isDir) {
+        rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${p}')">📁 ${it.name}</button></td></tr>`);
+      } else {
+        rows.push(`<tr><td><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="openAppFile('${p}')">📄 ${it.name}</button></td><td>${fmtBytes(it.size)}</td></tr>`);
+      }
+    });
+  document.getElementById('app-detail-files-list').innerHTML = rows.join('') || '<tr><td colspan="2" class="text-gray-500 dark:text-gray-400">Cartella vuota</td></tr>';
+}
+
+async function openAppFile(p) {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const res = await fetch('/api/apps/' + id + '/files/read?path=' + encodeURIComponent(p), { headers: authHeaders() });
+  const d = await res.json();
+  if (currentAppDetailId !== id) return;
+  if (!res.ok) return alert(d.error);
+  currentAppFile = p;
+  document.getElementById('app-detail-file-editor-path').textContent = p;
+  document.getElementById('app-detail-file-editor').value = d.content;
+  document.getElementById('app-detail-file-out').textContent = '';
+  document.getElementById('app-detail-file-editor-wrap').classList.remove('hidden');
+}
+
+async function saveAppFile() {
+  const id = currentAppDetailId;
+  if (!id || !currentAppFile) return;
+  const content = document.getElementById('app-detail-file-editor').value;
+  const out = document.getElementById('app-detail-file-out');
+  out.textContent = 'Salvataggio...';
+  const res = await fetch('/api/apps/' + id + '/files/write', {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: currentAppFile, content }),
   });
   const d = await res.json();
   out.textContent = res.ok ? 'Salvato' : 'Errore: ' + (d.error || 'sconosciuto');

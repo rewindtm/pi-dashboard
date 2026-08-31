@@ -19,6 +19,15 @@ const getApps = () => readJson('apps.json', []);
 const saveApps = (apps) => writeJson('apps.json', apps);
 const safeDirName = (name) => name.replace(/[^a-zA-Z0-9_.-]/g, '_');
 
+function resolveAppPath(appDir, relPath) {
+  const root = path.join(APPS_ROOT, appDir);
+  const target = path.resolve(root, '.' + path.sep + (relPath || ''));
+  if (target !== root && !target.startsWith(root + path.sep)) {
+    throw new Error('percorso fuori dalla directory consentita');
+  }
+  return target;
+}
+
 // Il processo è avviato con detached:true (pid == pgid del gruppo), quindi resta vivo
 // anche se la dashboard viene riavviata (systemd è configurato con KillMode=process).
 // Lo stato "in esecuzione" si ricava sempre controllando se quel pid esiste ancora,
@@ -298,6 +307,57 @@ router.post('/:id/pull', (req, res) => {
   execFile('git', ['pull', '--ff-only'], { cwd, timeout: 60000 }, (err, stdout, stderr) => {
     res.status(err ? 500 : 200).json({ ok: !err, stdout, stderr: stderr || (err ? err.message : '') });
   });
+});
+
+router.get('/:id/files/list', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    const dir = resolveAppPath(app.dir, req.query.path || '');
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const items = await Promise.all(
+      entries.map(async (e) => {
+        let size = 0;
+        try {
+          size = (await fs.promises.stat(path.join(dir, e.name))).size;
+        } catch {}
+        return { name: e.name, isDir: e.isDirectory(), size };
+      })
+    );
+    res.json({ path: req.query.path || '', items });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/:id/files/read', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    const file = resolveAppPath(app.dir, req.query.path || '');
+    const st = await fs.promises.stat(file);
+    if (st.isDirectory()) return res.status(400).json({ error: 'è una directory' });
+    if (st.size > 2 * 1024 * 1024) return res.status(400).json({ error: 'file troppo grande (>2MB)' });
+    const content = await fs.promises.readFile(file, 'utf8');
+    res.json({ content });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/:id/files/write', express.json({ limit: '2mb' }), async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    const file = resolveAppPath(app.dir, req.body.path || '');
+    await fs.promises.writeFile(file, req.body.content ?? '', 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.get('/:id/env', async (req, res) => {
