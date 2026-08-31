@@ -360,6 +360,22 @@ router.put('/:id/files/write', express.json({ limit: '2mb' }), async (req, res) 
   }
 });
 
+router.delete('/:id/files/delete', async (req, res) => {
+  const apps = getApps();
+  const app = apps.find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'non trovata' });
+  try {
+    const target = resolveAppPath(app.dir, req.query.path || '');
+    if (target === path.join(APPS_ROOT, app.dir)) return res.status(400).json({ error: 'non puoi eliminare la cartella radice del progetto' });
+    const st = await fs.promises.stat(target);
+    if (st.isDirectory()) await fs.promises.rm(target, { recursive: true, force: true });
+    else await fs.promises.unlink(target);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get('/:id/env', async (req, res) => {
   const apps = getApps();
   const app = apps.find((a) => a.id === req.params.id);

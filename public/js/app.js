@@ -799,18 +799,18 @@ async function loadAppFiles(dir) {
   }
   document.getElementById('app-detail-files-path').textContent = '/' + (d.path || '');
   const rows = [];
-  if (dir) rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${dir.split('/').slice(0, -1).join('/')}')">..</button></td></tr>`);
+  if (dir) rows.push(`<tr><td colspan="3"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${dir.split('/').slice(0, -1).join('/')}')">..</button></td></tr>`);
   (d.items || [])
     .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
     .forEach((it) => {
       const p = (dir ? dir + '/' : '') + it.name;
       if (it.isDir) {
-        rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${p}')">📁 ${it.name}</button></td></tr>`);
+        rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${p}')">📁 ${it.name}</button></td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile('${p}', true)">Elimina</button></td></tr>`);
       } else {
-        rows.push(`<tr><td><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="openAppFile('${p}')">📄 ${it.name}</button></td><td>${fmtBytes(it.size)}</td></tr>`);
+        rows.push(`<tr><td><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="openAppFile('${p}')">📄 ${it.name}</button></td><td>${fmtBytes(it.size)}</td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile('${p}', false)">Elimina</button></td></tr>`);
       }
     });
-  document.getElementById('app-detail-files-list').innerHTML = rows.join('') || '<tr><td colspan="2" class="text-gray-500 dark:text-gray-400">Cartella vuota</td></tr>';
+  document.getElementById('app-detail-files-list').innerHTML = rows.join('') || '<tr><td colspan="3" class="text-gray-500 dark:text-gray-400">Cartella vuota</td></tr>';
 }
 
 async function openAppFile(p) {
@@ -840,6 +840,23 @@ async function saveAppFile() {
   });
   const d = await res.json();
   out.textContent = res.ok ? 'Salvato' : 'Errore: ' + (d.error || 'sconosciuto');
+}
+
+async function deleteAppFile(p, isDir) {
+  const id = currentAppDetailId;
+  if (!id) return;
+  if (!confirm(`Eliminare ${isDir ? 'la cartella' : 'il file'} "${p}"? Non è reversibile.`)) return;
+  const res = await fetch('/api/apps/' + id + '/files/delete?path=' + encodeURIComponent(p), {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  const d = await res.json();
+  if (!res.ok) return alert('Errore: ' + (d.error || 'sconosciuto'));
+  if (currentAppFile === p) {
+    currentAppFile = null;
+    document.getElementById('app-detail-file-editor-wrap').classList.add('hidden');
+  }
+  loadAppFiles(currentAppFilesDir);
 }
 
 // --- Tunnel Cloudflare ---
