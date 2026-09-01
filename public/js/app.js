@@ -1,5 +1,11 @@
 let TOKEN = localStorage.getItem('pi_dashboard_token') || '';
 
+const notyf = new Notyf({
+  duration: 4000,
+  position: { x: 'right', y: 'top' },
+  dismissible: true,
+});
+
 function authHeaders() {
   return { Authorization: 'Bearer ' + TOKEN };
 }
@@ -266,14 +272,14 @@ let currentFile = null;
 async function openFile(p) {
   const res = await fetch('/api/files/read?path=' + encodeURIComponent(p), { headers: authHeaders() });
   const d = await res.json();
-  if (!res.ok) return alert(d.error);
+  if (!res.ok) return notyf.error(d.error);
   currentFile = p;
   document.getElementById('editor-path').textContent = p;
   document.getElementById('file-editor').value = d.content;
 }
 
 async function saveFile() {
-  if (!currentFile) return alert('Nessun file aperto');
+  if (!currentFile) return notyf.error('Nessun file aperto');
   const content = document.getElementById('file-editor').value;
   const res = await fetch('/api/files/write', {
     method: 'PUT',
@@ -281,14 +287,14 @@ async function saveFile() {
     body: JSON.stringify({ path: currentFile, content }),
   });
   const d = await res.json();
-  if (!res.ok) alert(d.error); else alert('Salvato');
+  if (!res.ok) notyf.error(d.error); else notyf.success('Salvato');
 }
 
 async function deleteEntry(p) {
   if (!confirm('Eliminare ' + p + '?')) return;
   const res = await fetch('/api/files/delete?path=' + encodeURIComponent(p), { method: 'DELETE', headers: authHeaders() });
   const d = await res.json();
-  if (!res.ok) alert(d.error);
+  if (!res.ok) notyf.error(d.error);
   loadFiles(currentDir);
 }
 
@@ -409,7 +415,7 @@ async function powerAction(action) {
   const label = action === 'reboot' ? 'riavviare' : 'spegnere';
   if (!confirm('Confermi di voler ' + label + ' il Raspberry Pi?')) return;
   await fetch('/api/power/' + action, { method: 'POST', headers: authHeaders() });
-  alert('Comando inviato. La dashboard potrebbe diventare irraggiungibile.');
+  notyf.success('Comando inviato. La dashboard potrebbe diventare irraggiungibile.');
 }
 
 // --- GitHub ---
@@ -513,10 +519,10 @@ async function cloneRepo(fullName, cloneUrl) {
     body: JSON.stringify({ fullName, cloneUrl }),
   });
   const d = await res.json();
-  if (!res.ok) return alert('Errore clone: ' + (d.error || d.detail || 'sconosciuto'));
+  if (!res.ok) return notyf.error('Errore clone: ' + (d.error || d.detail || 'sconosciuto'));
   await loadApps();
   renderRepos();
-  if (d.envSeeded) alert(`Clonata. Trovato ${d.envSeeded}: copiato come .env, puoi modificarlo da "Gestisci".`);
+  notyf.success(d.envSeeded ? `Clonata. Trovato ${d.envSeeded}: copiato come .env, puoi modificarlo da "Gestisci".` : 'Repository clonata');
 }
 
 async function loadApps() {
@@ -561,7 +567,8 @@ async function refreshGitInfo(id, doFetch) {
 async function pullApp(id) {
   const res = await fetch('/api/apps/' + id + '/pull', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
-  alert(d.ok ? 'Aggiornata dall\'ultima versione su GitHub' : 'Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+  if (d.ok) notyf.success('Aggiornata dall\'ultima versione su GitHub');
+  else notyf.error('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
   await refreshGitInfo(id, false);
 }
 
@@ -688,7 +695,7 @@ async function startDetailApp() {
   if (!id) return;
   const res = await fetch('/api/apps/' + id + '/start', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
-  if (!res.ok) alert('Errore: ' + (d.error || 'sconosciuto'));
+  if (!res.ok) notyf.error('Errore: ' + (d.error || 'sconosciuto'));
   await loadApps();
   if (currentAppDetailId === id) updateDetailProcessUI();
 }
@@ -706,7 +713,7 @@ async function restartDetailApp() {
   if (!id) return;
   const res = await fetch('/api/apps/' + id + '/restart', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
-  if (!res.ok) alert('Errore: ' + (d.error || 'sconosciuto'));
+  if (!res.ok) notyf.error('Errore: ' + (d.error || 'sconosciuto'));
   await loadApps();
   if (currentAppDetailId === id) updateDetailProcessUI();
 }
@@ -819,7 +826,7 @@ async function openAppFile(p) {
   const res = await fetch('/api/apps/' + id + '/files/read?path=' + encodeURIComponent(p), { headers: authHeaders() });
   const d = await res.json();
   if (currentAppDetailId !== id) return;
-  if (!res.ok) return alert(d.error);
+  if (!res.ok) return notyf.error(d.error);
   currentAppFile = p;
   document.getElementById('app-detail-file-editor-path').textContent = p;
   document.getElementById('app-detail-file-editor').value = d.content;
@@ -851,7 +858,7 @@ async function deleteAppFile(p, isDir) {
     headers: authHeaders(),
   });
   const d = await res.json();
-  if (!res.ok) return alert('Errore: ' + (d.error || 'sconosciuto'));
+  if (!res.ok) return notyf.error('Errore: ' + (d.error || 'sconosciuto'));
   if (currentAppFile === p) {
     currentAppFile = null;
     document.getElementById('app-detail-file-editor-wrap').classList.add('hidden');
@@ -967,7 +974,8 @@ async function restartTunnel() {
   if (!confirm('Riavviare il tunnel Cloudflare?')) return;
   const res = await fetch('/api/tunnel/restart', { method: 'POST', headers: authHeaders() });
   const d = await res.json();
-  if (!res.ok) alert('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+  if (res.ok) notyf.success('Tunnel riavviato');
+  else notyf.error('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
   loadTunnelStatus();
 }
 
@@ -1151,7 +1159,7 @@ async function copyText(text, btn) {
     btn.textContent = 'Copiato!';
     setTimeout(() => (btn.textContent = original), 1500);
   } catch (err) {
-    alert('Impossibile copiare: ' + err.message);
+    notyf.error('Impossibile copiare: ' + err.message);
   }
 }
 
