@@ -938,44 +938,90 @@ function removeTunnelRuleRow(i) {
 
 async function saveTunnelRules() {
   const out = document.getElementById('tunnel-rules-out');
-  out.textContent = 'Salvataggio e riavvio del tunnel...';
-  const res = await fetch('/api/tunnel/rules', {
-    method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rules: tunnelRules }),
-  });
-  const d = await res.json();
-  if (!res.ok) {
-    out.textContent = 'Errore: ' + (d.error || 'sconosciuto');
+  out.textContent = 'Salvataggio in corso...';
+  let d;
+  try {
+    const res = await fetch('/api/tunnel/rules', {
+      method: 'PUT',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules: tunnelRules }),
+    });
+    d = await res.json();
+    if (!res.ok) {
+      out.textContent = 'Errore: ' + (d.error || 'sconosciuto');
+      return;
+    }
+  } catch (err) {
+    out.textContent = 'Errore di rete durante il salvataggio: ' + err.message;
     return;
   }
-  out.textContent = d.restarted ? 'Salvato, tunnel riavviato' : 'Salvato, ma il riavvio del tunnel è fallito: ' + (d.restartError || '');
+
+  // Se stai usando la dashboard proprio attraverso questo tunnel, la connessione cade
+  // per qualche secondo mentre cloudflared si riavvia: aspetta che torni raggiungibile
+  // prima di procedere, invece di dare per scontato che sia già di nuovo su.
+  out.textContent = 'Salvato. Riavvio del tunnel in corso...';
+  const backUp = await waitForTunnelBackUp();
+  if (!backUp) {
+    out.textContent = 'Salvato, ma non riesco a confermare che il tunnel sia tornato attivo. Controlla lo stato e riprova.';
+    loadTunnelStatus();
+    return;
+  }
+  out.textContent = 'Tunnel riavviato.';
   loadTunnelStatus();
 
   if (d.newHostnames && d.newHostnames.length) {
-    out.textContent += ` — creazione record DNS per: ${d.newHostnames.join(', ')}...`;
-    const dnsRes = await fetch('/api/tunnel/rules/dns', {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tunnel: d.tunnel, hostnames: d.newHostnames }),
-    });
-    const dnsData = await dnsRes.json();
-    const results = dnsData.results || [];
-    const ok = results.filter((r) => r.ok).map((r) => r.hostname);
-    const failed = results.filter((r) => !r.ok);
-    let dnsMsg = '';
-    if (ok.length) dnsMsg += ` DNS creato per: ${ok.join(', ')}.`;
-    if (failed.length) dnsMsg += ` Errore DNS per: ${failed.map((r) => r.hostname + ' (' + r.error + ')').join(', ')}.`;
-    out.textContent = out.textContent.replace(/ — creazione record DNS.*$/, '') + dnsMsg;
+    out.textContent += ` Creazione record DNS per: ${d.newHostnames.join(', ')}...`;
+    try {
+      const dnsRes = await fetch('/api/tunnel/rules/dns', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tunnel: d.tunnel, hostnames: d.newHostnames }),
+      });
+      const dnsData = await dnsRes.json();
+      const results = dnsData.results || [];
+      const ok = results.filter((r) => r.ok).map((r) => r.hostname);
+      const failed = results.filter((r) => !r.ok);
+      let dnsMsg = '';
+      if (ok.length) dnsMsg += ` DNS creato per: ${ok.join(', ')}.`;
+      if (failed.length) dnsMsg += ` Errore DNS per: ${failed.map((r) => r.hostname + ' (' + r.error + ')').join(', ')}.`;
+      out.textContent = 'Tunnel riavviato.' + dnsMsg;
+    } catch (err) {
+      out.textContent = 'Tunnel riavviato, ma la creazione DNS è fallita: ' + err.message;
+    }
   }
+}
+
+async function waitForTunnelBackUp(maxAttempts = 20) {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const res = await fetch('/api/tunnel/status', { headers: authHeaders() });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.active) return true;
+      }
+    } catch {}
+  }
+  return false;
 }
 
 async function restartTunnel() {
   if (!confirm('Riavviare il tunnel Cloudflare?')) return;
-  const res = await fetch('/api/tunnel/restart', { method: 'POST', headers: authHeaders() });
-  const d = await res.json();
-  if (res.ok) notyf.success('Tunnel riavviato');
-  else notyf.error('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+  try {
+    const res = await fetch('/api/tunnel/restart', { method: 'POST', headers: authHeaders() });
+    if (!res.ok) {
+      const d = await res.json();
+      notyf.error('Errore: ' + (d.stderr || d.error || 'sconosciuto'));
+      return;
+    }
+  } catch (err) {
+    notyf.error('Errore di rete: ' + err.message);
+    return;
+  }
+  notyf.success('Riavvio avviato...');
+  const backUp = await waitForTunnelBackUp();
+  if (backUp) notyf.success('Tunnel riavviato');
+  else notyf.error('Non riesco a confermare che il tunnel sia tornato attivo');
   loadTunnelStatus();
 }
 

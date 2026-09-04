@@ -102,16 +102,13 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
     return res.status(500).json({ error: 'scrittura configurazione fallita', detail: err.message });
   }
 
-  const restartRes = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
-  // La creazione dei record DNS per gli hostname nuovi è un passo separato (POST /rules/dns):
-  // può richiedere qualche secondo per ognuno, e non deve far sembrare bloccato il salvataggio.
-  res.json({
-    ok: true,
-    restarted: restartRes.ok,
-    restartError: restartRes.ok ? null : restartRes.stderr,
-    newHostnames,
-    tunnel: base.tunnel,
-  });
+  // Se il browser sta usando la dashboard proprio attraverso questo tunnel (es. pi.rewi.dev),
+  // riavviare cloudflared PRIMA di rispondere interromperebbe la connessione che deve
+  // portare questa stessa risposta. Rispondi subito e riavvia dopo, fuori dal ciclo richiesta/risposta.
+  res.json({ ok: true, newHostnames, tunnel: base.tunnel });
+  setTimeout(() => {
+    run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
+  }, 300);
 });
 
 router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
@@ -129,8 +126,12 @@ router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
 });
 
 router.post('/restart', async (req, res) => {
-  const result = await run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
-  res.status(result.ok ? 200 : 500).json(result);
+  // Stesso motivo del salvataggio: rispondi prima, poi riavvia — non nel mezzo della
+  // richiesta che potrebbe star viaggiando proprio su questo tunnel.
+  res.json({ ok: true });
+  setTimeout(() => {
+    run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
+  }, 300);
 });
 
 module.exports = router;
