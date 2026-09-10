@@ -367,6 +367,10 @@
             <input id="app-detail-cmd" class="input max-w-md" placeholder="comando di avvio, es. npm start" />
             <button class="btn-secondary" onclick="saveDetailStartCommand()">Salva comando</button>
           </div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <input id="app-detail-autostart" type="checkbox" onchange="saveDetailAutostart(this.checked)" />
+            Avvia automaticamente all'avvio del Raspberry Pi
+          </label>
           <div class="flex flex-wrap gap-2">
             <button class="btn-secondary" onclick="installApp()">Installa dipendenze (npm install)</button>
             <button id="app-detail-start-btn" class="btn" onclick="startDetailApp()">Avvia</button>

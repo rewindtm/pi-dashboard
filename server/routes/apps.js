@@ -152,9 +152,23 @@ router.put('/:id', express.json(), (req, res) => {
   const app = apps.find((a) => a.id === req.params.id);
   if (!app) return res.status(404).json({ error: 'non trovata' });
   if (typeof req.body?.startCommand === 'string') app.startCommand = req.body.startCommand;
+  if (typeof req.body?.autostart === 'boolean') app.autostart = req.body.autostart;
   saveApps(apps);
   res.json({ ok: true, app });
 });
+
+// Avvia tutte le app con autostart attivo che non sono già in esecuzione.
+// Chiamata all'avvio del processo Node della dashboard: copre sia il riavvio
+// della dashboard sia il boot del Pi, dato che pi-dashboard.service parte al boot.
+function startAutostartApps() {
+  const apps = getApps();
+  for (const app of apps) {
+    if (app.autostart && !isAlive(app.pid) && app.startCommand) {
+      const result = startProcess(app.id);
+      if (!result.ok) console.error(`autostart fallito per ${app.id}: ${result.error}`);
+    }
+  }
+}
 
 function startProcess(id) {
   const apps = getApps();
@@ -422,3 +436,4 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.startAutostartApps = startAutostartApps;

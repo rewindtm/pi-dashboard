@@ -655,6 +655,7 @@ function updateDetailProcessUI() {
   document.getElementById('app-detail-stop-btn').classList.toggle('hidden', !running);
   document.getElementById('app-detail-restart-btn').classList.toggle('hidden', !running);
   document.getElementById('app-detail-cmd').value = app.startCommand || '';
+  document.getElementById('app-detail-autostart').checked = !!app.autostart;
   if (running) {
     refreshDetailLogs();
     refreshDetailProcessStats();
@@ -677,6 +678,22 @@ async function saveDetailStartCommand() {
   });
   await loadApps();
   if (currentAppDetailId === id) updateDetailProcessUI();
+}
+
+async function saveDetailAutostart(checked) {
+  const id = currentAppDetailId;
+  if (!id) return;
+  const res = await fetch('/api/apps/' + id, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autostart: checked }),
+  });
+  if (!res.ok) {
+    notyf.error('Errore nel salvataggio');
+    document.getElementById('app-detail-autostart').checked = !checked;
+    return;
+  }
+  await loadApps();
 }
 
 async function installApp() {

@@ -55,4 +55,5 @@ attachTerminalServer(wss);
 const PORT = process.env.PORT || 7890;
 server.listen(PORT, () => {
   console.log(`Pi Dashboard in ascolto su http://0.0.0.0:${PORT}`);
+  appsRoutes.startAutostartApps();
 });
