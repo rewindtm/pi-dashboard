@@ -476,9 +476,27 @@ async function loadRepos() {
     if (!res.ok) throw new Error(d.error || 'errore');
     githubRepos = d.repos;
     renderRepos();
+    refreshInstalledUpdateBadges();
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
   }
+}
+
+// Controlla in locale (senza contattare GitHub) se le repo installate hanno
+// aggiornamenti non ancora scaricati, riusando la cache già popolata da
+// "Controlla aggiornamenti"/git fetch nella pagina di dettaglio.
+async function refreshInstalledUpdateBadges() {
+  const installedIds = githubApps.filter((a) => githubRepos.some((r) => r.fullName === a.fullName)).map((a) => a.id);
+  await Promise.all(
+    installedIds.map(async (id) => {
+      try {
+        const res = await fetch('/api/apps/' + id + '/git', { headers: authHeaders() });
+        const d = await res.json();
+        if (res.ok) gitInfoCache[id] = d;
+      } catch {}
+    })
+  );
+  renderRepos();
 }
 
 function renderRepos() {
@@ -486,13 +504,20 @@ function renderRepos() {
   const tbody = document.querySelector('#repos-table tbody');
   const rows = githubRepos
     .filter((r) => r.fullName.toLowerCase().includes(filter))
-    .map((r) => {
-      const clonedApp = githubApps.find((a) => a.fullName === r.fullName);
+    .map((r) => ({ r, clonedApp: githubApps.find((a) => a.fullName === r.fullName) }))
+    // Le repo installate sempre in cima, poi ordine originale (per data aggiornamento).
+    .sort((a, b) => (b.clonedApp ? 1 : 0) - (a.clonedApp ? 1 : 0))
+    .map(({ r, clonedApp }) => {
       const visBadge = r.private
         ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">privata</span>'
         : '<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">pubblica</span>';
+      const updateInfo = clonedApp ? gitInfoCache[clonedApp.id] : null;
+      const needsUpdate = updateInfo && updateInfo.hasUpstream && updateInfo.behind > 0;
+      const updateBadge = needsUpdate
+        ? `<span class="badge bg-accent/15 text-accent" title="${updateInfo.behind} aggiornament${updateInfo.behind > 1 ? 'i' : 'o'} disponibil${updateInfo.behind > 1 ? 'i' : 'e'}">⬆️ aggiornamento disponibile</span>`
+        : '';
       const statusBadge = clonedApp
-        ? `<span class="badge bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">${clonedApp.status === 'running' ? 'installata · attiva' : 'installata'}</span>`
+        ? `<span class="badge bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">${clonedApp.status === 'running' ? 'installata · attiva' : 'installata'}</span> ${updateBadge}`
         : '<span class="text-xs text-gray-400 dark:text-gray-500">—</span>';
       const action = clonedApp
         ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${clonedApp.id}')">Gestisci</button>`
