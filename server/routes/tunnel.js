@@ -111,16 +111,81 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
   }, 300);
 });
 
+// `cloudflared tunnel route dns` decide sempre la zona guardandosi il certificato locale
+// (autorizzato su UNA sola zona, es. rewi.dev): dato un hostname di una zona diversa anche
+// se nello stesso account Cloudflare, non fallisce ma lo tratta come etichetta e lo appende
+// alla zona nota, creando record come "stats.altrodominio.it.rewi.dev". Per gestire più
+// domini serve passare dalla API Cloudflare, che sceglie la zona giusta in base all'hostname.
+async function cfFetch(url, token, opts = {}) {
+  return fetch('https://api.cloudflare.com/client/v4' + url, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+}
+
+async function listCloudflareZones(token) {
+  const r = await cfFetch('/zones?per_page=50', token);
+  const data = await r.json();
+  if (!r.ok || !data.success) throw new Error((data.errors && data.errors[0] && data.errors[0].message) || 'impossibile elencare le zone Cloudflare');
+  return data.result.map((z) => ({ id: z.id, name: z.name }));
+}
+
+function findZoneForHostname(hostname, zones) {
+  const matches = zones.filter((z) => hostname === z.name || hostname.endsWith('.' + z.name));
+  matches.sort((a, b) => b.name.length - a.name.length);
+  return matches[0] || null;
+}
+
+async function createDnsRecordViaApi(hostname, tunnel, zone, token) {
+  const r = await cfFetch(`/zones/${zone.id}/dns_records`, token, {
+    method: 'POST',
+    body: JSON.stringify({ type: 'CNAME', name: hostname, content: `${tunnel}.cfargotunnel.com`, proxied: true, ttl: 1 }),
+  });
+  const data = await r.json();
+  if (data.success) return { ok: true, error: null };
+  const message = (data.errors && data.errors.map((e) => e.message).join('; ')) || 'errore sconosciuto';
+  const ok = /already exists/i.test(message);
+  return { ok, error: ok ? null : message };
+}
+
 router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
   const hostnames = Array.isArray(req.body && req.body.hostnames) ? req.body.hostnames : [];
   const tunnel = req.body && req.body.tunnel;
   if (!tunnel || !hostnames.length) return res.json({ results: [] });
 
+  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+  if (!cfToken) {
+    // Nessun token API configurato: comportamento storico, valido solo per la zona del
+    // certificato locale di cloudflared.
+    const results = [];
+    for (const hostname of hostnames) {
+      const dnsRes = await run('cloudflared', ['tunnel', 'route', 'dns', tunnel, hostname], { timeout: 20000 });
+      const ok = dnsRes.ok || /already exists/i.test(dnsRes.stderr);
+      results.push({ hostname, ok, error: ok ? null : dnsRes.stderr });
+    }
+    return res.json({ results });
+  }
+
+  let zones;
+  try {
+    zones = await listCloudflareZones(cfToken);
+  } catch (err) {
+    return res.json({ results: hostnames.map((hostname) => ({ hostname, ok: false, error: err.message })) });
+  }
+
   const results = [];
   for (const hostname of hostnames) {
-    const dnsRes = await run('cloudflared', ['tunnel', 'route', 'dns', tunnel, hostname], { timeout: 20000 });
-    const ok = dnsRes.ok || /already exists/i.test(dnsRes.stderr);
-    results.push({ hostname, ok, error: ok ? null : dnsRes.stderr });
+    const zone = findZoneForHostname(hostname, zones);
+    if (!zone) {
+      results.push({ hostname, ok: false, error: `nessuna zona Cloudflare trovata per ${hostname}` });
+      continue;
+    }
+    try {
+      const result = await createDnsRecordViaApi(hostname, tunnel, zone, cfToken);
+      results.push({ hostname, ...result });
+    } catch (err) {
+      results.push({ hostname, ok: false, error: err.message });
+    }
   }
   res.json({ results });
 });
