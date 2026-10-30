@@ -6,12 +6,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
 <link rel="stylesheet" href="https://unpkg.com/notyf@3/notyf.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     darkMode: 'class',
     theme: {
       extend: {
+        fontFamily: {
+          sans: ['Barlow', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['"Barlow Condensed"', 'Barlow', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        },
         colors: {
           accent: { DEFAULT: '#0ca678', light: '#12b886', dark: '#099268' },
           surface: { light: '#f4f6f8', dark: '#0f1115' },
@@ -28,13 +35,27 @@
 </script>
 <style type="text/tailwindcss">
   @layer base {
+    /* Barlow è stretto: base leggermente più grande per mantenere la leggibilità. */
+    html {
+      font-size: 16.5px;
+    }
     body {
-      @apply bg-surface-light text-gray-800 dark:bg-surface-dark dark:text-gray-100;
+      @apply bg-surface-light font-sans text-gray-800 antialiased dark:bg-surface-dark dark:text-gray-100;
+    }
+    h1, h2 {
+      @apply font-display tracking-wide;
     }
   }
   @layer components {
     .btn {
-      @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-accent px-3.5 py-2 text-sm font-medium text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
+      @apply inline-flex items-center gap-1.5 rounded-md border border-transparent bg-accent px-3.5 py-1.5 font-display text-[0.95rem] font-semibold uppercase tracking-wider text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
+    }
+    .section-title {
+      @apply font-display text-sm font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400;
+    }
+    .section-title::before {
+      content: '';
+      @apply mr-2 inline-block h-3.5 w-1 rounded-sm bg-accent align-[-2px];
     }
     .btn-secondary {
       @apply btn border-border-light bg-white text-gray-700 hover:bg-gray-50 dark:border-border-dark dark:bg-panel-dark dark:text-gray-200 dark:hover:bg-white/5;
@@ -43,7 +64,7 @@
       @apply btn bg-red-600 hover:bg-red-500;
     }
     .card {
-      @apply rounded-xl border border-border-light bg-panel-light p-4 shadow-sm dark:border-border-dark dark:bg-panel-dark dark:shadow-none;
+      @apply rounded-lg border border-border-light bg-panel-light p-4 shadow-sm dark:border-border-dark dark:bg-panel-dark dark:shadow-none;
     }
     .stat-card {
       @apply card flex items-center gap-3;
@@ -55,10 +76,10 @@
       @apply w-full rounded-lg border border-border-light bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent dark:border-border-dark dark:bg-black/40 dark:text-gray-100 dark:placeholder:text-gray-500;
     }
     .side-link {
-      @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition hover:bg-sidebar-hover hover:text-white;
+      @apply flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 font-display text-[1.05rem] font-medium uppercase tracking-wider text-gray-400 transition hover:bg-sidebar-hover hover:text-white;
     }
     .side-link.active {
-      @apply border-l-2 border-accent bg-sidebar-hover text-white;
+      @apply border-accent bg-sidebar-hover text-white;
     }
     .side-link svg {
       @apply h-5 w-5 shrink-0;
@@ -67,13 +88,13 @@
       @apply w-full border-collapse text-sm;
     }
     .table-base th {
-      @apply border-b border-border-light px-2 py-1.5 text-left font-semibold text-gray-500 dark:border-border-dark dark:text-gray-400;
+      @apply border-b border-border-light px-2 py-1.5 text-left font-display text-[0.9rem] font-semibold uppercase tracking-wider text-gray-500 dark:border-border-dark dark:text-gray-400;
     }
     .table-base td {
       @apply border-b border-border-light px-2 py-1.5 dark:border-border-dark;
     }
     .badge {
-      @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium;
+      @apply inline-block rounded px-2 py-0.5 font-display text-[0.8rem] font-semibold uppercase tracking-wider;
     }
     .icon-btn {
       @apply flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5;
@@ -84,7 +105,7 @@
 <body class="bg-surface-light dark:bg-surface-dark text-gray-800 dark:text-gray-100">
 
 <div id="login" class="flex h-screen flex-col items-center justify-center gap-3">
-  <div class="mb-2 flex items-center gap-2 text-xl font-semibold">
+  <div class="mb-2 flex items-center gap-2 font-display text-3xl font-semibold uppercase tracking-wider">
     <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M15.75 3v1.5M3 8.25h1.5M3 15.75h1.5M19.5 8.25H21M19.5 15.75H21M8.25 19.5V21M15.75 19.5V21M6.75 6.75h10.5v10.5H6.75V6.75Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h4.5v4.5h-4.5v-4.5Z" /></svg>
     </span>
@@ -103,7 +124,7 @@
       <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M15.75 3v1.5M3 8.25h1.5M3 15.75h1.5M19.5 8.25H21M19.5 15.75H21M8.25 19.5V21M15.75 19.5V21M6.75 6.75h10.5v10.5H6.75V6.75Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h4.5v4.5h-4.5v-4.5Z" /></svg>
       </span>
-      <span class="font-semibold">Pi Dashboard</span>
+      <span class="font-display text-xl font-semibold uppercase tracking-wider">Pi Dashboard</span>
     </div>
     <nav class="flex-1 space-y-1 overflow-y-auto px-2 py-2">
       <button class="side-link active" data-view="system-view">
@@ -155,7 +176,7 @@
       <button class="icon-btn lg:hidden" onclick="toggleSidebar(true)" aria-label="Apri menu">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" /></svg>
       </button>
-      <h1 id="hostname" class="flex-1 truncate text-sm font-semibold text-gray-500 dark:text-gray-400">Pi Dashboard</h1>
+      <h1 id="hostname" class="flex-1 truncate font-display text-lg font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Pi Dashboard</h1>
       <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" aria-label="Cambia tema">
         <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-6.364-.386 1.591-1.591M3 12h2.25m.386-6.364 1.591 1.591M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         <svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
@@ -173,7 +194,7 @@
       <div id="system-view" class="view space-y-4">
         <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
         <div class="card">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Carico CPU e RAM (tempo reale)</h3>
+          <h3 class="mb-2 section-title">Carico CPU e RAM (tempo reale)</h3>
           <canvas id="history-chart" class="h-48 w-full"></canvas>
           <div class="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
             <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-accent"></span> CPU</span>
@@ -184,7 +205,7 @@
 
       <div id="wifi-view" class="view hidden space-y-4">
         <div class="card">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Stato</h3>
+          <h3 class="mb-2 section-title">Stato</h3>
           <div id="wifi-status" class="text-sm">Caricamento...</div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -198,7 +219,7 @@
           </table>
         </div>
         <div class="card space-y-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Connetti</h3>
+          <h3 class=" section-title">Connetti</h3>
           <div class="flex flex-wrap gap-2">
             <input id="wifi-connect-ssid" class="input max-w-xs" placeholder="SSID" />
             <input id="wifi-connect-password" type="password" class="input max-w-xs" placeholder="Password (se richiesta)" />
@@ -225,7 +246,7 @@
 
       <div id="github-view" class="view hidden space-y-4">
         <div id="github-connect" class="card space-y-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Connessione GitHub</h3>
+          <h3 class=" section-title">Connessione GitHub</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">
             Crea un
             <a class="text-accent hover:underline" href="https://github.com/settings/tokens/new?scopes=repo&description=pi-dashboard" target="_blank" rel="noopener">Personal Access Token</a>
@@ -250,7 +271,7 @@
 
           <div>
             <div class="mb-2 flex flex-wrap items-center gap-2">
-              <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Le tue repository</h3>
+              <h3 class=" section-title">Le tue repository</h3>
               <input id="repos-filter" class="input max-w-xs" placeholder="Filtra per nome..." oninput="renderRepos()" />
               <button class="btn-secondary" onclick="refreshReposInBackground()">Aggiorna</button>
               <span id="repos-refresh-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
@@ -277,7 +298,7 @@
 
         <div class="card space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Regole ingress</h3>
+            <h3 class=" section-title">Regole ingress</h3>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="addTunnelRuleRow()">+ Aggiungi regola</button>
           </div>
           <p class="text-sm text-gray-500 dark:text-gray-400">Ogni regola instrada un hostname pubblico verso un servizio locale del Pi (es. <code>http://localhost:7890</code>). Salvando, la configurazione viene scritta e il tunnel riavviato.</p>
@@ -293,7 +314,7 @@
 
       <div id="db-view" class="view hidden space-y-4">
         <div id="db-not-installed" class="hidden card space-y-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">PostgreSQL non è installato</h3>
+          <h3 class=" section-title">PostgreSQL non è installato</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">Installa PostgreSQL sul Pi per poter creare database per le tue app.</p>
           <button class="btn" onclick="installPostgres()">Installa PostgreSQL</button>
           <div id="db-install-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
@@ -307,14 +328,14 @@
           </div>
 
           <div class="card space-y-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Accesso remoto</h3>
+            <h3 class=" section-title">Accesso remoto</h3>
             <p class="text-sm text-gray-500 dark:text-gray-400">Per connettersi ai database da un altro dispositivo sulla tua rete Tailscale (non solo dal Pi stesso). Apre PostgreSQL solo alla rete Tailscale, non a Internet.</p>
             <div id="db-remote-status" class="text-sm"></div>
             <button id="db-enable-remote-btn" class="btn hidden" onclick="enableRemoteAccess()">Abilita accesso remoto</button>
           </div>
 
           <div class="card space-y-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Nuovo database</h3>
+            <h3 class=" section-title">Nuovo database</h3>
             <div class="flex flex-wrap items-center gap-2">
               <input id="db-new-name" class="input max-w-xs" placeholder="nome (es. fantafede)" />
               <select id="db-new-app" class="input max-w-xs"><option value="">— per quale app (opzionale) —</option></select>
@@ -342,7 +363,7 @@
         </div>
 
         <div class="card">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Carico del processo</h3>
+          <h3 class="mb-2 section-title">Carico del processo</h3>
           <div id="app-detail-sys" class="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div class="text-sm text-gray-500 dark:text-gray-400">Processo non in esecuzione</div>
           </div>
@@ -350,7 +371,7 @@
 
         <div class="card space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Repository</h3>
+            <h3 class=" section-title">Repository</h3>
             <div class="flex flex-wrap gap-1.5">
               <button class="btn-secondary !px-2 !py-1 text-xs" onclick="checkDetailUpdates()">Controlla aggiornamenti</button>
               <button class="btn-secondary !px-2 !py-1 text-xs" onclick="pullDetailApp()">Scarica aggiornamenti</button>
@@ -361,7 +382,7 @@
 
         <div class="card space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Processo</h3>
+            <h3 class=" section-title">Processo</h3>
             <div id="app-detail-status" class="flex items-center gap-1.5"></div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -381,7 +402,7 @@
           <pre id="app-detail-install-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100 empty:hidden"></pre>
           <div>
             <div class="mb-1 flex items-center justify-between">
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Log</h4>
+              <h4 class=" section-title">Log</h4>
               <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyDetailLogs(this)">Copia</button>
             </div>
             <pre id="app-detail-logs" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
@@ -389,7 +410,7 @@
         </div>
 
         <div class="card space-y-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">File .env</h3>
+          <h3 class=" section-title">File .env</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">Variabili d'ambiente dell'app, lette all'avvio (es. da <code>dotenv</code>). Le modifiche hanno effetto al prossimo avvio.</p>
           <textarea id="app-detail-env" placeholder="CHIAVE=valore" class="h-56 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
           <div class="flex flex-wrap gap-2">
@@ -400,7 +421,7 @@
         </div>
 
         <div class="card space-y-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">File del progetto</h3>
+          <h3 class=" section-title">File del progetto</h3>
           <div id="app-detail-files-path" class="text-sm text-gray-500 dark:text-gray-400"></div>
           <div class="overflow-x-auto">
             <table class="table-base">
@@ -439,7 +460,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <h4 class="mb-1.5 mt-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Editor</h4>
+        <h4 class="section-title mb-1.5 mt-4">Editor</h4>
         <div id="editor-path" class="mb-1.5 text-sm text-gray-500 dark:text-gray-400"></div>
         <textarea id="file-editor" placeholder="Apri un file per modificarlo..." class="h-72 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
         <div class="mt-2"><button class="btn" onclick="saveFile()">Salva</button></div>

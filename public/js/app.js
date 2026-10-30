@@ -129,7 +129,7 @@ function statCard(key, label, value) {
   return `<div class="stat-card">
     <span class="stat-icon ${icon.bg}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-6 w-6">${icon.svg}</svg></span>
     <div class="min-w-0">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">${label}</h3>
+      <h3 class="section-title">${label}</h3>
       <div class="truncate text-lg font-semibold text-gray-800 dark:text-gray-100">${value}</div>
     </div>
   </div>`;
