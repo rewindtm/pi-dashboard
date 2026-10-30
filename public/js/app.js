@@ -467,9 +467,19 @@ async function disconnectGithub() {
   loadGithubStatus();
 }
 
+// Mostra subito le repo dalla cache del server, poi chiede in background la lista
+// fresca da GitHub e ridisegna la tabella solo se è cambiato qualcosa.
+let reposRefreshing = false;
+
+function setReposRefreshing(on) {
+  reposRefreshing = on;
+  const el = document.getElementById('repos-refresh-status');
+  if (el) el.textContent = on ? 'Aggiornamento da GitHub in background...' : '';
+}
+
 async function loadRepos() {
   const tbody = document.querySelector('#repos-table tbody');
-  tbody.innerHTML = '<tr><td colspan="4">Caricamento...</td></tr>';
+  if (!githubRepos.length) tbody.innerHTML = '<tr><td colspan="5">Caricamento...</td></tr>';
   try {
     const res = await fetch('/api/github/repos', { headers: authHeaders() });
     const d = await res.json();
@@ -477,8 +487,30 @@ async function loadRepos() {
     githubRepos = d.repos;
     renderRepos();
     refreshInstalledUpdateBadges();
+    // Se i dati arrivano dalla cache il server sta già (o deve) aggiornarli: li prendiamo senza bloccare la pagina.
+    if (d.stale || d.refreshing) refreshReposInBackground();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Errore: ' + err.message + '</td></tr>';
+  }
+}
+
+async function refreshReposInBackground() {
+  if (reposRefreshing) return;
+  setReposRefreshing(true);
+  try {
+    const res = await fetch('/api/github/repos?wait=1', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    if (JSON.stringify(d.repos) !== JSON.stringify(githubRepos)) {
+      githubRepos = d.repos;
+      renderRepos();
+      refreshInstalledUpdateBadges();
+    }
+  } catch (err) {
+    // La cache già mostrata resta valida: l'errore non deve rompere la pagina.
+    console.warn('Aggiornamento repo GitHub fallito:', err.message);
+  } finally {
+    setReposRefreshing(false);
   }
 }
 

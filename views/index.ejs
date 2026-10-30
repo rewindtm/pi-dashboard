@@ -252,7 +252,8 @@
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Le tue repository</h3>
               <input id="repos-filter" class="input max-w-xs" placeholder="Filtra per nome..." oninput="renderRepos()" />
-              <button class="btn-secondary" onclick="loadRepos()">Aggiorna</button>
+              <button class="btn-secondary" onclick="refreshReposInBackground()">Aggiorna</button>
+              <span id="repos-refresh-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
             </div>
             <div class="card overflow-x-auto !p-0">
               <table id="repos-table" class="table-base">
