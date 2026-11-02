@@ -16,7 +16,6 @@ Frontend: Node.js + Express, viste server-side in **EJS**, stile con **Tailwind 
 - **GitHub**: connetti un Personal Access Token, sfoglia le tue repository, clonale sul Pi, imposta un comando di avvio per ciascuna e avviala/fermala con un click (log in tempo reale, `npm install`, pull per aggiornarla, editor `.env`, eliminazione). I processi avviati sopravvivono a un riavvio della dashboard.
 - **Tunnel Cloudflare**: modifica le regole ingress di `cloudflared` (hostname → servizio locale) e riavvia il tunnel.
 - **Database**: crea/elimina database e utenti PostgreSQL dedicati per le tue app, con connection string pronta da incollare nel loro `.env`.
-- **API**: `POST /api/exec` per eseguire comandi da remoto (usabile anche in modo programmatico).
 
 Tutto è protetto da un token condiviso (`DASHBOARD_TOKEN`).
 
@@ -49,7 +48,7 @@ npm start
 - La gestione servizi usa `sudo systemctl`, gli aggiornamenti usano `sudo apt-get`, riavvio/spegnimento usano `sudo reboot`/`sudo shutdown`: tutte protette da regole `sudoers` `NOPASSWD` dedicate (vedi `setup-pi.sh`), non da `sudo` generico.
 - La gestione WiFi usa `nmcli` (richiede NetworkManager, predefinito su Raspberry Pi OS Bookworm+); l'utente viene aggiunto al gruppo `netdev`.
 - Il token GitHub e l'elenco delle app clonate sono salvati solo localmente in `data/` (esclusa da git, permessi `600`), mai inviati altrove se non alle API ufficiali di GitHub.
-- Il comando di avvio di ogni app GitHub viene eseguito così come inserito (stessa fiducia dell'utente che ha già accesso al terminale e a `/api/exec`): non condividere l'accesso alla dashboard con chi non deve poter eseguire comandi sul Pi.
+- Il comando di avvio di ogni app GitHub viene eseguito così come inserito (stessa fiducia dell'utente che ha già accesso al terminale): non condividere l'accesso alla dashboard con chi non deve poter eseguire comandi sul Pi.
 - I database PostgreSQL creati dalla dashboard usano `sudo -u postgres psql` (regola `sudoers` dedicata, non `sudo` generico); le credenziali generate sono salvate solo in `data/databases.json` (esclusa da git, permessi `600`).
 
 ## Aggiornare la dashboard sul Pi

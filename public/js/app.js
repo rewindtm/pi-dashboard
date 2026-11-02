@@ -313,19 +313,6 @@ async function deleteEntry(p) {
   loadFiles(currentDir);
 }
 
-async function runExec() {
-  const command = document.getElementById('exec-cmd').value;
-  const out = document.getElementById('exec-out');
-  out.textContent = 'Esecuzione...';
-  const res = await fetch('/api/exec', {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command }),
-  });
-  const d = await res.json();
-  out.textContent = (d.stdout || '') + (d.stderr ? '\n[stderr]\n' + d.stderr : '') + (d.error ? 'Errore: ' + d.error : '');
-}
-
 // --- WiFi ---
 async function loadWifi() {
   const statusEl = document.getElementById('wifi-status');
