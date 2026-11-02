@@ -1,13 +1,15 @@
 const pty = require('node-pty');
-const { checkToken } = require('./auth');
+const { verify } = require('./auth');
 
 const SHELL = process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || 'bash');
 
 function attachTerminalServer(wss) {
   wss.on('connection', (ws, req) => {
     const url = new URL(req.url, 'http://localhost');
+    // Il WebSocket del browser non può impostare header: il token passa nella query ma
+    // il controllo è comunque a tempo costante e soggetto al limite di tentativi.
     const token = url.searchParams.get('token');
-    if (!checkToken(token)) {
+    if (!verify(req, token).ok) {
       ws.close(4001, 'unauthorized');
       return;
     }

@@ -6,22 +6,37 @@ const notyf = new Notyf({
   dismissible: true,
 });
 
+// Escape per tutto ciò che finisce in innerHTML (nomi file, SSID, descrizioni repo, errori...).
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Argomento stringa sicuro dentro un attributo onclick="fn(...)".
+function jsArg(v) {
+  return esc(JSON.stringify(String(v == null ? '' : v)));
+}
+
 function authHeaders() {
   return { Authorization: 'Bearer ' + TOKEN };
 }
 
 async function login() {
   const input = document.getElementById('token-input').value.trim();
-  const res = await fetch('/api/login?token=' + encodeURIComponent(input));
+  if (!input) return;
+  const res = await fetch('/api/login', { headers: { Authorization: 'Bearer ' + input } });
   const data = await res.json();
   if (data.ok) {
     TOKEN = input;
     localStorage.setItem('pi_dashboard_token', TOKEN);
     showApp();
   } else {
-    document.getElementById('login-error').textContent = 'Token non valido';
+    document.getElementById('login-error').textContent = data.error || 'Token non valido';
   }
 }
+
+document.getElementById('token-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login();
+});
 
 function logout() {
   localStorage.removeItem('pi_dashboard_token');
@@ -156,7 +171,7 @@ async function loadSystem() {
     document.getElementById('system-cards').innerHTML = cards.join('');
     pushHistoryPoint(d.load.currentLoad, ramPct);
   } catch (err) {
-    document.getElementById('system-cards').innerHTML = '<div class="card">Errore: ' + err.message + '</div>';
+    document.getElementById('system-cards').innerHTML = '<div class="card">Errore: ' + esc(err.message) + '</div>';
   }
 }
 
@@ -225,17 +240,17 @@ async function loadServices() {
     tbody.innerHTML = d.services
       .map(
         (s) => `<tr>
-          <td>${s.unit}</td><td>${s.load}</td><td>${s.active}</td><td>${s.sub}</td>
+          <td>${esc(s.unit)}</td><td>${esc(s.load)}</td><td>${esc(s.active)}</td><td>${esc(s.sub)}</td>
           <td class="space-x-1">
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction('${s.unit}','start')">start</button>
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction('${s.unit}','stop')">stop</button>
-            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction('${s.unit}','restart')">restart</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction(${jsArg(s.unit)},'start')">start</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction(${jsArg(s.unit)},'stop')">stop</button>
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction(${jsArg(s.unit)},'restart')">restart</button>
           </td>
         </tr>`
       )
       .join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="5">Errore: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Errore: ' + esc(err.message) + '</td></tr>';
   }
 }
 
@@ -252,17 +267,17 @@ async function loadFiles(dir) {
   document.getElementById('files-path').textContent = '/' + d.path;
   const tbody = document.querySelector('#files-list tbody');
   const rows = [];
-  if (dir) rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="loadFiles('${dir.split('/').slice(0, -1).join('/')}')">..</button></td><td></td><td></td></tr>`);
+  if (dir) rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="loadFiles(${jsArg(dir.split('/').slice(0, -1).join('/'))})">..</button></td><td></td><td></td></tr>`);
   d.items
     .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
     .forEach((it) => {
       const p = (dir ? dir + '/' : '') + it.name;
       if (it.isDir) {
-        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="loadFiles('${p}')">📁 ${it.name}</button></td><td></td>
-          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry('${p}')">elimina</button></td></tr>`);
+        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="loadFiles(${jsArg(p)})">📁 ${esc(it.name)}</button></td><td></td>
+          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry(${jsArg(p)})">elimina</button></td></tr>`);
       } else {
-        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="openFile('${p}')">📄 ${it.name}</button></td><td>${fmtBytes(it.size)}</td>
-          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry('${p}')">elimina</button></td></tr>`);
+        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="openFile(${jsArg(p)})">📄 ${esc(it.name)}</button></td><td>${fmtBytes(it.size)}</td>
+          <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry(${jsArg(p)})">elimina</button></td></tr>`);
       }
     });
   tbody.innerHTML = rows.join('');
@@ -319,9 +334,9 @@ async function loadWifi() {
     const res = await fetch('/api/wifi/status', { headers: authHeaders() });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'errore');
-    statusEl.innerHTML = `Interfaccia <b>${d.device}</b> — stato <b>${d.state}</b>` +
-      (d.connection ? ` — connesso a <b>${d.connection}</b>` : ' — non connesso') +
-      (d.ip ? ` — IP <b>${d.ip}</b>` : '');
+    statusEl.innerHTML = `Interfaccia <b>${esc(d.device)}</b> — stato <b>${esc(d.state)}</b>` +
+      (d.connection ? ` — connesso a <b>${esc(d.connection)}</b>` : ' — non connesso') +
+      (d.ip ? ` — IP <b>${esc(d.ip)}</b>` : '');
   } catch (err) {
     statusEl.textContent = 'Errore: ' + err.message;
   }
@@ -338,15 +353,15 @@ async function scanWifi() {
     tbody.innerHTML = d.networks
       .map(
         (n) => `<tr>
-          <td>${n.inUse ? '✅ ' : ''}${n.ssid}</td>
-          <td>${n.signal}%</td>
-          <td>${n.security || 'aperta'}</td>
-          <td><button class="btn-secondary !px-2 !py-1 text-xs" onclick="promptConnect('${n.ssid.replace(/'/g, "\\'")}')">connetti</button></td>
+          <td>${n.inUse ? '✅ ' : ''}${esc(n.ssid)}</td>
+          <td>${esc(n.signal)}%</td>
+          <td>${esc(n.security || 'aperta')}</td>
+          <td><button class="btn-secondary !px-2 !py-1 text-xs" onclick="promptConnect(${jsArg(n.ssid)})">connetti</button></td>
         </tr>`
       )
       .join('') || '<tr><td colspan="4">Nessuna rete trovata</td></tr>';
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + esc(err.message) + '</td></tr>';
   }
 }
 
@@ -393,7 +408,7 @@ async function checkUpdates() {
       : 'Sistema aggiornato, nessun pacchetto da aggiornare';
     document.getElementById('upgrade-btn').classList.toggle('hidden', d.count === 0);
     tbody.innerHTML = d.packages
-      .map((p) => `<tr><td>${p.package}</td><td>${p.currentVersion}</td><td>${p.newVersion}</td><td>${p.repo}</td></tr>`)
+      .map((p) => `<tr><td>${esc(p.package)}</td><td>${esc(p.currentVersion)}</td><td>${esc(p.newVersion)}</td><td>${esc(p.repo)}</td></tr>`)
       .join('');
   } catch (err) {
     summary.textContent = 'Errore: ' + err.message;
@@ -490,7 +505,7 @@ async function loadRepos() {
     // Se i dati arrivano dalla cache il server sta già (o deve) aggiornarli: li prendiamo senza bloccare la pagina.
     if (d.stale || d.refreshing) refreshReposInBackground();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="5">Errore: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Errore: ' + esc(err.message) + '</td></tr>';
   }
 }
 
@@ -552,12 +567,12 @@ function renderRepos() {
         ? `<span class="badge bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">${clonedApp.status === 'running' ? 'installata · attiva' : 'installata'}</span> ${updateBadge}`
         : '<span class="text-xs text-gray-400 dark:text-gray-500">—</span>';
       const action = clonedApp
-        ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail('${clonedApp.id}')">Gestisci</button>`
-        : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo('${r.fullName}','${r.cloneUrl}')">Clona</button>`;
+        ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail(${jsArg(clonedApp.id)})">Gestisci</button>`
+        : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo(${jsArg(r.fullName)},${jsArg(r.cloneUrl)})">Clona</button>`;
       return `<tr>
         <td>
-          <a href="${r.htmlUrl}" target="_blank" rel="noopener" class="text-accent hover:underline">${r.fullName}</a>
-          ${r.description ? `<div class="text-xs text-gray-500 dark:text-gray-400">${r.description}</div>` : ''}
+          <a href="${esc(r.htmlUrl)}" target="_blank" rel="noopener" class="text-accent hover:underline">${esc(r.fullName)}</a>
+          ${r.description ? `<div class="text-xs text-gray-500 dark:text-gray-400">${esc(r.description)}</div>` : ''}
         </td>
         <td>${new Date(r.updatedAt).toLocaleDateString()}</td>
         <td>${visBadge}</td>
@@ -594,10 +609,10 @@ const gitInfoCache = {};
 function gitInfoHtml(id) {
   const info = gitInfoCache[id];
   if (!info) return '<span class="text-xs text-gray-500 dark:text-gray-400">Verifica repo locale...</span>';
-  if (info.error) return `<span class="text-xs text-red-500">${info.error}</span>`;
+  if (info.error) return `<span class="text-xs text-red-500">${esc(info.error)}</span>`;
   const parts = [];
-  if (info.branch) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400">branch <b class="text-gray-700 dark:text-gray-200">${info.branch}</b></span>`);
-  if (info.commit) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400" title="${info.commit.date}">${info.commit.short} — ${info.commit.message}</span>`);
+  if (info.branch) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400">branch <b class="text-gray-700 dark:text-gray-200">${esc(info.branch)}</b></span>`);
+  if (info.commit) parts.push(`<span class="text-xs text-gray-500 dark:text-gray-400" title="${esc(info.commit.date)}">${esc(info.commit.short)} — ${esc(info.commit.message)}</span>`);
   if (info.hasUpstream && info.behind > 0) {
     parts.push(`<span class="badge bg-accent/15 text-accent">${info.behind} aggiornament${info.behind > 1 ? 'i' : 'o'} disponibil${info.behind > 1 ? 'i' : 'e'}</span>`);
   } else if (info.hasUpstream) {
@@ -880,15 +895,15 @@ async function loadAppFiles(dir) {
   }
   document.getElementById('app-detail-files-path').textContent = '/' + (d.path || '');
   const rows = [];
-  if (dir) rows.push(`<tr><td colspan="3"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${dir.split('/').slice(0, -1).join('/')}')">..</button></td></tr>`);
+  if (dir) rows.push(`<tr><td colspan="3"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles(${jsArg(dir.split('/').slice(0, -1).join('/'))})">..</button></td></tr>`);
   (d.items || [])
     .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
     .forEach((it) => {
       const p = (dir ? dir + '/' : '') + it.name;
       if (it.isDir) {
-        rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles('${p}')">📁 ${it.name}</button></td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile('${p}', true)">Elimina</button></td></tr>`);
+        rows.push(`<tr><td colspan="2"><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="loadAppFiles(${jsArg(p)})">📁 ${esc(it.name)}</button></td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile(${jsArg(p)}, true)">Elimina</button></td></tr>`);
       } else {
-        rows.push(`<tr><td><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="openAppFile('${p}')">📄 ${it.name}</button></td><td>${fmtBytes(it.size)}</td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile('${p}', false)">Elimina</button></td></tr>`);
+        rows.push(`<tr><td><button class="text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white" onclick="openAppFile(${jsArg(p)})">📄 ${esc(it.name)}</button></td><td>${fmtBytes(it.size)}</td><td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteAppFile(${jsArg(p)}, false)">Elimina</button></td></tr>`);
       }
     });
   document.getElementById('app-detail-files-list').innerHTML = rows.join('') || '<tr><td colspan="3" class="text-gray-500 dark:text-gray-400">Cartella vuota</td></tr>';
@@ -956,8 +971,8 @@ async function loadTunnel() {
     tunnelMeta = { tunnel: d.tunnel, credentialsFile: d.credentialsFile };
     renderTunnelRules();
     document.getElementById('tunnel-meta').innerHTML =
-      `Tunnel ID: <span class="font-mono">${tunnelMeta.tunnel || 'n/d'}</span><br>` +
-      `File credenziali: <span class="font-mono">${tunnelMeta.credentialsFile || 'n/d'}</span>`;
+      `Tunnel ID: <span class="font-mono">${esc(tunnelMeta.tunnel || 'n/d')}</span><br>` +
+      `File credenziali: <span class="font-mono">${esc(tunnelMeta.credentialsFile || 'n/d')}</span>`;
   } catch (err) {
     document.getElementById('tunnel-rules').innerHTML = '';
     rulesOut.textContent = 'Errore: ' + err.message;
@@ -992,8 +1007,8 @@ function renderTunnelRules() {
   container.innerHTML = tunnelRules
     .map(
       (r, i) => `<div class="flex flex-wrap items-center gap-2">
-        <input class="input max-w-xs" placeholder="hostname (es. app.tuodominio.dev)" value="${(r.hostname || '').replace(/"/g, '&quot;')}" oninput="tunnelRules[${i}].hostname = this.value" />
-        <input class="input max-w-xs" placeholder="servizio (es. http://localhost:3000)" value="${(r.service || '').replace(/"/g, '&quot;')}" oninput="tunnelRules[${i}].service = this.value" />
+        <input class="input max-w-xs" placeholder="hostname (es. app.tuodominio.dev)" value="${esc(r.hostname || '')}" oninput="tunnelRules[${i}].hostname = this.value" />
+        <input class="input max-w-xs" placeholder="servizio (es. http://localhost:3000)" value="${esc(r.service || '')}" oninput="tunnelRules[${i}].service = this.value" />
         <button class="btn-danger !px-2 !py-1 text-xs" onclick="removeTunnelRuleRow(${i})">Rimuovi</button>
       </div>`
     )
@@ -1119,7 +1134,7 @@ async function loadDbView() {
 
   const appSelect = document.getElementById('db-new-app');
   appSelect.innerHTML = '<option value="">— per quale app (opzionale) —</option>' +
-    githubApps.map((a) => `<option value="${a.fullName}">${a.fullName}</option>`).join('');
+    githubApps.map((a) => `<option value="${esc(a.fullName)}">${esc(a.fullName)}</option>`).join('');
 
   loadDatabases();
 }
@@ -1164,7 +1179,7 @@ async function loadDatabases() {
     currentDbs = d.databases;
     renderDatabases();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + esc(err.message) + '</td></tr>';
   }
 }
 
@@ -1173,21 +1188,21 @@ function renderDatabases() {
   tbody.innerHTML = currentDbs
     .map((db) => {
       const mainRow = `<tr>
-          <td>${db.dbName}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
-          <td>${db.forApp || '—'}</td>
+          <td>${esc(db.dbName)}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
+          <td>${esc(db.forApp || '—')}</td>
           <td class="space-y-1">
             <div><code class="text-xs">${'•'.repeat(12)}</code> <span class="text-xs text-gray-500 dark:text-gray-400">locale</span>
-              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionString.replace(/'/g, "\\'")}', this)">Copia</button>
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText(${jsArg(db.connectionString)}, this)">Copia</button>
             </div>
             ${db.connectionStringRemote
               ? `<div><code class="text-xs">${'•'.repeat(12)}</code> <span class="text-xs text-gray-500 dark:text-gray-400">remota (Tailscale)</span>
-                  <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText('${db.connectionStringRemote.replace(/'/g, "\\'")}', this)">Copia</button>
+                  <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText(${jsArg(db.connectionStringRemote)}, this)">Copia</button>
                 </div>`
               : '<div class="text-xs text-gray-400 dark:text-gray-500">remota non disponibile — abilita l\'accesso remoto sopra</div>'}
           </td>
           <td>
-            ${db.exists ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleDbTables('${db.dbName}')">${expandedDbTables.has(db.dbName) ? 'Nascondi tabelle' : 'Tabelle'}</button>` : ''}
-            <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteDatabase('${db.dbName}')">Elimina</button>
+            ${db.exists ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleDbTables(${jsArg(db.dbName)})">${expandedDbTables.has(db.dbName) ? 'Nascondi tabelle' : 'Tabelle'}</button>` : ''}
+            <button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteDatabase(${jsArg(db.dbName)})">Elimina</button>
           </td>
         </tr>`;
       const tablesRow = expandedDbTables.has(db.dbName)
@@ -1201,13 +1216,13 @@ function renderDatabases() {
 function dbTablesHtml(dbName) {
   const tables = dbTablesCache[dbName];
   if (!tables) return '<span class="text-xs text-gray-500 dark:text-gray-400">Caricamento tabelle...</span>';
-  if (tables.error) return `<span class="text-xs text-red-500">${tables.error}</span>`;
+  if (tables.error) return `<span class="text-xs text-red-500">${esc(tables.error)}</span>`;
   if (!tables.length) return '<span class="text-xs text-gray-500 dark:text-gray-400">Nessuna tabella nello schema public</span>';
   return `<div class="space-y-2">${tables
     .map(
       (t) => `<div class="rounded-lg border border-border-light p-2 dark:border-border-dark">
-        <div class="text-sm font-semibold">${t.name} <span class="text-xs font-normal text-gray-500 dark:text-gray-400">(${t.rowCount ?? '?'} righe)</span></div>
-        <div class="text-xs text-gray-500 dark:text-gray-400">${t.columns.map((c) => `${c.name} <span class="text-gray-400 dark:text-gray-500">${c.type}</span>`).join(', ')}</div>
+        <div class="text-sm font-semibold">${esc(t.name)} <span class="text-xs font-normal text-gray-500 dark:text-gray-400">(${esc(t.rowCount ?? '?')} righe)</span></div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">${t.columns.map((c) => `${esc(c.name)} <span class="text-gray-400 dark:text-gray-500">${esc(c.type)}</span>`).join(', ')}</div>
       </div>`
     )
     .join('')}</div>`;
@@ -1284,7 +1299,7 @@ async function copyText(text, btn) {
 }
 
 if (TOKEN) {
-  fetch('/api/login?token=' + encodeURIComponent(TOKEN)).then((r) => r.json()).then((d) => {
+  fetch('/api/login', { headers: authHeaders() }).then((r) => r.json()).then((d) => {
     if (d.ok) showApp();
   });
 }

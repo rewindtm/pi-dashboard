@@ -4,7 +4,7 @@ const http = require('http');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 
-const { httpAuth, checkToken } = require('./auth');
+const { httpAuth, loginHandler } = require('./auth');
 const { attachTerminalServer } = require('./terminal');
 const systemRoutes = require('./routes/system');
 const servicesRoutes = require('./routes/services');
@@ -32,9 +32,7 @@ app.get('/', (req, res) => {
   res.render('index');
 });
 
-app.get('/api/login', (req, res) => {
-  res.json({ ok: checkToken(req.query.token) });
-});
+app.get('/api/login', loginHandler);
 
 app.use('/api/system', httpAuth, systemRoutes);
 app.use('/api/services', httpAuth, servicesRoutes);
