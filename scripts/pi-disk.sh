@@ -7,6 +7,7 @@
 # Uso: pi-disk check
 #      pi-disk mount|unmount|automount-on|automount-off <partizione>
 #      pi-disk eject <disco o partizione>
+#      pi-disk format <disco intero> <ext4|exfat|ntfs> [etichetta]
 set -euo pipefail
 
 BASE=/mnt/disks
@@ -14,6 +15,7 @@ FSTAB=/etc/fstab
 MARK='# pi-dashboard'
 
 die() { echo "$*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || die "manca $1: installa con 'sudo apt install $2'"; }
 
 action=${1:-}
 dev=${2:-}
@@ -106,6 +108,46 @@ case "$action" in
     sed -i "\#^UUID=$uuid .*$MARK\$#d" "$FSTAB"
     systemctl daemon-reload
     echo "montaggio automatico disattivato"
+    ;;
+
+  format)
+    # pi-disk format <disco intero> <ext4|exfat|ntfs> [etichetta]
+    # Cancella TUTTO il disco: nuova tabella GPT con una sola partizione.
+    newfs=${3:-}
+    newlabel=${4:-}
+    [ "$(lsblk -no TYPE "$dev" | head -1)" = disk ] || die "indica il disco intero, non una partizione"
+    case "$newfs" in
+      ext4)  need mkfs.ext4 e2fsprogs;  ptype=0FC63DAF-8483-4772-8E79-3D69D8477DE4 ;;
+      exfat) need mkfs.exfat exfatprogs; ptype=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 ;;
+      ntfs)  need mkntfs ntfs-3g;        ptype=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 ;;
+      *) die "filesystem non supportato" ;;
+    esac
+    [[ $newlabel =~ ^[A-Za-z0-9_-]{0,15}$ ]] || die "etichetta non valida (max 15 caratteri: lettere, numeri, - _)"
+    lsblk -nro MOUNTPOINT "$dev" | grep -q . && die "smonta prima tutte le partizioni del disco"
+    lsblk -nro FSTYPE "$dev" | grep -qx swap && die "il disco contiene swap"
+
+    # via le voci di montaggio automatico dei vecchi filesystem
+    for u in $(lsblk -nro UUID "$dev"); do
+      [[ $u =~ ^[A-Za-z0-9-]+$ ]] && sed -i "\#^UUID=$u .*$MARK\$#d" "$FSTAB"
+    done
+    for p in $(lsblk -nro PATH "$dev" | tail -n +2); do wipefs -a "$p" >/dev/null 2>&1 || true; done
+    wipefs -a "$dev" >/dev/null
+    printf 'label: gpt\ntype=%s\n' "$ptype" | sfdisk --quiet "$dev"
+    udevadm settle
+    partprobe "$dev" 2>/dev/null || true
+    sleep 1; udevadm settle
+    newpart=$(lsblk -nro PATH,TYPE "$dev" | awk '$2=="part"{print $1; exit}')
+    [ -n "$newpart" ] || die "partizione non creata"
+
+    lbl=()
+    [ -n "$newlabel" ] && lbl=(-L "$newlabel")
+    case "$newfs" in
+      ext4)  mkfs.ext4 -F -q "${lbl[@]}" "$newpart" ;;
+      exfat) mkfs.exfat "${lbl[@]}" "$newpart" >/dev/null ;;
+      ntfs)  mkntfs -f -Q "${lbl[@]}" "$newpart" >/dev/null ;;
+    esac
+    systemctl daemon-reload
+    echo "formattato $newpart come $newfs"
     ;;
 
   *)

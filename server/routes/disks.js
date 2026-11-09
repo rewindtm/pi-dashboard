@@ -74,17 +74,26 @@ async function listDisks() {
     });
 }
 
+const DISK = /^\/dev\/(sd[a-z]+|nvme[0-9]+n[0-9]+)$/;
+const FORMAT_TOOLS = { ext4: 'mkfs.ext4', exfat: 'mkfs.exfat', ntfs: 'mkntfs' };
+const LABEL = /^[A-Za-z0-9_-]{0,15}$/;
+
+function hasTool(bin) {
+  return ['/usr/sbin/', '/sbin/', '/usr/bin/'].some((d) => fs.existsSync(d + bin));
+}
+
 router.get('/', async (req, res) => {
   try {
     const helperInstalled = fs.existsSync(HELPER);
-    res.json({ disks: await listDisks(), helperInstalled });
+    const formatTools = Object.fromEntries(Object.entries(FORMAT_TOOLS).map(([fsType, bin]) => [fsType, hasTool(bin)]));
+    res.json({ disks: await listDisks(), helperInstalled, formatTools });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-async function helper(res, args) {
-  const r = await run('sudo', ['-n', HELPER, ...args]);
+async function helper(res, args, timeout) {
+  const r = await run('sudo', ['-n', HELPER, ...args], timeout);
   if (r.ok) return res.json({ ok: true, output: r.stdout });
   if (/password is required|not allowed|a terminal is required/.test(r.stderr) || !fs.existsSync(HELPER)) {
     return res.status(412).json({ error: 'Sezione Dischi non abilitata: esegui una volta sul Pi "sudo bash ~/pi-dashboard/scripts/setup-disks.sh"' });
@@ -109,6 +118,29 @@ router.post('/:action(mount|unmount|eject)', async (req, res) => {
 router.post('/automount', async (req, res) => {
   const device = validDevice(req, res);
   if (device) helper(res, [req.body.enabled ? 'automount-on' : 'automount-off', device]);
+});
+
+// Cancella tutto il disco. Barriere: disco intero non di sistema, nulla di montato,
+// conferma scritta del nome del disco (es. "sda").
+router.post('/format', async (req, res) => {
+  const { device, fstype, label = '', confirm } = req.body || {};
+  if (typeof device !== 'string' || !DISK.test(device)) return res.status(400).json({ error: 'indica un disco intero (es. /dev/sda)' });
+  if (!FORMAT_TOOLS[fstype]) return res.status(400).json({ error: 'filesystem non supportato' });
+  if (typeof label !== 'string' || !LABEL.test(label)) return res.status(400).json({ error: 'etichetta non valida (max 15 caratteri: lettere, numeri, - _)' });
+  if (confirm !== device.replace('/dev/', '')) return res.status(400).json({ error: 'conferma errata: digita il nome del disco' });
+
+  let disks;
+  try {
+    disks = await listDisks();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+  const disk = disks.find((d) => d.path === device);
+  if (!disk) return res.status(404).json({ error: 'disco non trovato' });
+  if (disk.system) return res.status(403).json({ error: 'disco di sistema: non formattabile' });
+  if (disk.partitions.some((p) => p.mountpoint)) return res.status(409).json({ error: 'smonta prima tutte le partizioni del disco' });
+
+  helper(res, ['format', device, fstype, label], 10 * 60 * 1000);
 });
 
 module.exports = router;

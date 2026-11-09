@@ -315,6 +315,13 @@ async function deleteEntry(p) {
 }
 
 // --- Dischi ---
+let diskFormatTools = {};
+const DISK_FS_LABELS = {
+  ext4: 'ext4 (Linux, consigliato per uso solo col Pi)',
+  exfat: 'exFAT (Windows, Mac e Linux)',
+  ntfs: 'NTFS (Windows)',
+};
+
 async function loadDisks() {
   const list = document.getElementById('disks-list');
   if (!list.children.length) list.innerHTML = '<div class="card text-sm">Caricamento...</div>';
@@ -323,6 +330,7 @@ async function loadDisks() {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'errore');
     document.getElementById('disks-setup').classList.toggle('hidden', d.helperInstalled);
+    diskFormatTools = d.formatTools || {};
     list.innerHTML = d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>';
   } catch (err) {
     list.innerHTML = '<div class="card text-sm">Errore: ' + esc(err.message) + '</div>';
@@ -365,12 +373,31 @@ function diskCard(disk) {
   const eject = disk.canEject
     ? `<button class="btn-danger !px-2 !py-1 text-xs" onclick="diskAction('eject', ${jsArg(disk.path)})">Rimuovi in sicurezza</button>`
     : '';
+  const format = disk.system
+    ? ''
+    : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="toggleDiskFormat(${jsArg(disk.name)})">Formatta</button>`;
+  const fsOptions = Object.keys(DISK_FS_LABELS)
+    .map((k) => `<option value="${k}" ${diskFormatTools[k] ? '' : 'disabled'}>${esc(DISK_FS_LABELS[k])}${diskFormatTools[k] ? '' : ' — strumento non installato'}</option>`)
+    .join('');
+  const formatPanel = disk.system
+    ? ''
+    : `<div id="fmt-${esc(disk.name)}" class="hidden border-t border-red-500/40 bg-red-500/5 p-4 text-sm">
+        <p class="mb-3 font-semibold text-red-500">Attenzione: questo cancella tutti i dati di ${esc(disk.model || disk.name)} (${fmtBytes(disk.size)}). Non è reversibile.</p>
+        <div class="flex flex-wrap items-end gap-3">
+          <label class="text-xs">Filesystem<br><select id="fmt-fs-${esc(disk.name)}" class="input">${fsOptions}</select></label>
+          <label class="text-xs">Etichetta (opzionale)<br><input id="fmt-label-${esc(disk.name)}" class="input w-40" maxlength="15" placeholder="es. Dati" /></label>
+          <label class="text-xs">Per confermare scrivi <b>${esc(disk.name)}</b><br>
+            <input id="fmt-confirm-${esc(disk.name)}" class="input w-32" autocomplete="off" oninput="document.getElementById('fmt-go-${esc(disk.name)}').disabled = this.value !== ${jsArg(disk.name)}" /></label>
+          <button id="fmt-go-${esc(disk.name)}" class="btn-danger" disabled onclick="runDiskFormat(${jsArg(disk.path)}, ${jsArg(disk.name)})">Formatta disco</button>
+        </div>
+      </div>`;
   return `<div class="card !p-0 overflow-x-auto">
     <div class="flex flex-wrap items-center justify-between gap-2 p-4">
       <div><h3 class="section-title">${esc(disk.model || disk.name)}</h3>
         <div class="text-xs text-gray-500 dark:text-gray-400">${esc(disk.path)} · ${fmtBytes(disk.size)} ${tags}</div></div>
-      ${eject}
+      <div class="flex gap-2">${format} ${eject}</div>
     </div>
+    ${formatPanel}
     <table class="table-base">
       <thead><tr><th>Partizione</th><th>Filesystem</th><th>Dimensione</th><th>Montato su</th><th>Spazio</th><th>Azioni</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -400,6 +427,20 @@ async function diskPost(path, body) {
 function diskAction(action, device) {
   if (action === 'eject' && !confirm('Scollegare il disco? Dopo potrai staccarlo in sicurezza.')) return;
   diskPost(action, { device });
+}
+
+function toggleDiskFormat(name) {
+  document.getElementById('fmt-' + name).classList.toggle('hidden');
+}
+
+async function runDiskFormat(device, name) {
+  const fstype = document.getElementById('fmt-fs-' + name).value;
+  const label = document.getElementById('fmt-label-' + name).value.trim();
+  const confirm = document.getElementById('fmt-confirm-' + name).value;
+  const go = document.getElementById('fmt-go-' + name);
+  go.disabled = true;
+  go.textContent = 'Formattazione in corso...';
+  await diskPost('format', { device, fstype, label, confirm });
 }
 
 function diskAutomount(device, enabled) {
