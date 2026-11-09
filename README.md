@@ -16,6 +16,7 @@ Frontend: Node.js + Express, viste server-side in **EJS**, stile con **Tailwind 
 - **GitHub**: connetti un Personal Access Token, sfoglia le tue repository, clonale sul Pi, imposta un comando di avvio per ciascuna e avviala/fermala con un click (log in tempo reale, `npm install`, pull per aggiornarla, editor `.env`, eliminazione). I processi avviati sopravvivono a un riavvio della dashboard.
 - **Tunnel Cloudflare**: modifica le regole ingress di `cloudflared` (hostname → servizio locale) e riavvia il tunnel.
 - **Database**: crea/elimina database e utenti PostgreSQL dedicati per le tue app, con connection string pronta da incollare nel loro `.env`.
+- **Dischi**: elenca dischi USB/SSD con partizioni e spazio usato; monta/smonta, montaggio automatico all'avvio (`nofail` in `/etc/fstab`) e rimozione sicura. Richiede una volta `sudo bash scripts/setup-disks.sh` (helper `pi-disk` con permessi limitati; i dischi di sistema sono protetti).
 
 Tutto è protetto da un token condiviso (`DASHBOARD_TOKEN`).
 

@@ -135,6 +135,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3M4.5 4.5h15a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V6a1.5 1.5 0 011.5-1.5z" /></svg>
         Terminale
       </button>
+      <button class="side-link" data-view="disks-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>
+        Dischi
+      </button>
       <button class="side-link" data-view="wifi-view">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856a9.75 9.75 0 0113.788 0M1.924 8.674a14.25 14.25 0 0120.152 0M12 18.75h.008v.008H12v-.008z" /></svg>
         WiFi
@@ -197,6 +201,20 @@
             <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-blue-500"></span> RAM</span>
           </div>
         </div>
+      </div>
+
+      <div id="disks-view" class="view hidden space-y-4">
+        <div id="disks-setup" class="card hidden border-amber-400 text-sm">
+          <h3 class="mb-2 section-title">Abilitazione necessaria</h3>
+          <p class="mb-2 text-gray-600 dark:text-gray-300">Per montare e smontare i dischi serve un helper con permessi limitati. Eseguilo una sola volta sul Pi:</p>
+          <code class="block overflow-x-auto rounded bg-black p-2 font-mono text-xs text-gray-100">sudo bash ~/pi-dashboard/scripts/setup-disks.sh</code>
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Concede all'utente di eseguire senza password solo <span class="font-mono">/usr/local/bin/pi-disk</span>, che opera solo su dischi non di sistema.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="btn-secondary" onclick="loadDisks()">Aggiorna</button>
+          <span id="disks-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
+        </div>
+        <div id="disks-list" class="space-y-4"></div>
       </div>
 
       <div id="wifi-view" class="view hidden space-y-4">

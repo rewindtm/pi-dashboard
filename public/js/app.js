@@ -80,6 +80,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     if (btn.dataset.view === 'system-view') loadSystem();
     if (btn.dataset.view === 'services-view') loadServices();
     if (btn.dataset.view === 'files-view') loadFiles('');
+    if (btn.dataset.view === 'disks-view') loadDisks();
     if (btn.dataset.view === 'wifi-view') loadWifi();
     if (btn.dataset.view === 'updates-view') resetUpdatesView();
     if (btn.dataset.view === 'github-view') loadGithubStatus();
@@ -311,6 +312,98 @@ async function deleteEntry(p) {
   const d = await res.json();
   if (!res.ok) notyf.error(d.error);
   loadFiles(currentDir);
+}
+
+// --- Dischi ---
+async function loadDisks() {
+  const list = document.getElementById('disks-list');
+  if (!list.children.length) list.innerHTML = '<div class="card text-sm">Caricamento...</div>';
+  try {
+    const res = await fetch('/api/disks', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    document.getElementById('disks-setup').classList.toggle('hidden', d.helperInstalled);
+    list.innerHTML = d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>';
+  } catch (err) {
+    list.innerHTML = '<div class="card text-sm">Errore: ' + esc(err.message) + '</div>';
+  }
+}
+
+function diskCard(disk) {
+  const tags = [
+    disk.system ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">sistema</span>' : '',
+    disk.transport ? `<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">${esc(disk.transport)}</span>` : '',
+  ].join(' ');
+  const rows = disk.partitions
+    .map((p) => {
+      const pct = p.used != null && p.size ? Math.min(100, (p.used / p.size) * 100) : null;
+      const usage = pct == null
+        ? '<span class="text-xs text-gray-400">—</span>'
+        : `<div class="h-1.5 w-32 overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${pct.toFixed(0)}%"></div></div>
+           <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">${fmtBytes(p.used)} usati · ${fmtBytes(p.avail)} liberi</div>`;
+      const dev = jsArg(p.path);
+      const actions = disk.system
+        ? '<span class="text-xs text-gray-400">protetto</span>'
+        : [
+            p.mountpoint
+              ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="diskAction('unmount', ${dev})">Smonta</button>`
+              : p.mountable ? `<button class="btn !px-2 !py-1 text-xs" onclick="diskAction('mount', ${dev})">Monta</button>` : '',
+            p.mountable
+              ? `<label class="ml-2 inline-flex items-center gap-1 text-xs"><input type="checkbox" ${p.automount ? 'checked' : ''} onchange="diskAutomount(${dev}, this.checked)" /> all'avvio</label>`
+              : '<span class="text-xs text-gray-400">filesystem non supportato</span>',
+          ].join(' ');
+      return `<tr>
+        <td>${esc(p.name)}<div class="text-xs text-gray-500 dark:text-gray-400">${esc(p.label || '')}</div></td>
+        <td>${esc(p.fstype || '—')}</td>
+        <td>${fmtBytes(p.size)}</td>
+        <td>${p.mountpoint ? `<span class="font-mono text-xs">${esc(p.mountpoint)}</span>${p.readOnly ? ' <span class="badge">sola lettura</span>' : ''}` : '<span class="text-xs text-gray-400">non montato</span>'}</td>
+        <td>${usage}</td>
+        <td>${actions}</td>
+      </tr>`;
+    })
+    .join('') || '<tr><td colspan="6" class="text-gray-500 dark:text-gray-400">Nessuna partizione</td></tr>';
+  const eject = disk.canEject
+    ? `<button class="btn-danger !px-2 !py-1 text-xs" onclick="diskAction('eject', ${jsArg(disk.path)})">Rimuovi in sicurezza</button>`
+    : '';
+  return `<div class="card !p-0 overflow-x-auto">
+    <div class="flex flex-wrap items-center justify-between gap-2 p-4">
+      <div><h3 class="section-title">${esc(disk.model || disk.name)}</h3>
+        <div class="text-xs text-gray-500 dark:text-gray-400">${esc(disk.path)} · ${fmtBytes(disk.size)} ${tags}</div></div>
+      ${eject}
+    </div>
+    <table class="table-base">
+      <thead><tr><th>Partizione</th><th>Filesystem</th><th>Dimensione</th><th>Montato su</th><th>Spazio</th><th>Azioni</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function diskPost(path, body) {
+  const status = document.getElementById('disks-status');
+  status.textContent = 'Operazione in corso...';
+  try {
+    const res = await fetch('/api/disks/' + path, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'errore');
+    notyf.success(d.output || 'Fatto');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+  status.textContent = '';
+  loadDisks();
+}
+
+function diskAction(action, device) {
+  if (action === 'eject' && !confirm('Scollegare il disco? Dopo potrai staccarlo in sicurezza.')) return;
+  diskPost(action, { device });
+}
+
+function diskAutomount(device, enabled) {
+  diskPost('automount', { device, enabled });
 }
 
 // --- WiFi ---
