@@ -17,6 +17,7 @@ Frontend: Node.js + Express, viste server-side in **EJS**, stile con **Tailwind 
 - **Tunnel Cloudflare**: modifica le regole ingress di `cloudflared` (hostname → servizio locale) e riavvia il tunnel.
 - **Database**: crea/elimina database e utenti PostgreSQL dedicati per le tue app, con connection string pronta da incollare nel loro `.env`.
 - **Dischi**: elenca dischi USB/SSD con partizioni e spazio usato; monta/smonta, montaggio automatico all'avvio (`nofail` in `/etc/fstab`) e rimozione sicura e formattazione dell'intero disco (ext4, exFAT, NTFS) con conferma scritta. Richiede una volta `sudo bash scripts/setup-disks.sh` (helper `pi-disk` con permessi limitati; i dischi di sistema sono protetti).
+- **Docker**: stato di Docker/Compose, progetti Compose (avvia, ferma, riavvia, build, aggiorna immagini, log, spegni), container (start/stop/restart/log/rimuovi con CPU e RAM), immagini (scarica, rimuovi), pulizia. Build e pull girano in background con output in tempo reale. Nella pagina di ogni app clonata compare un blocco Docker se la repo ha un `docker-compose.yml`.
 
 Tutto è protetto da un token condiviso (`DASHBOARD_TOKEN`).
 

@@ -17,6 +17,7 @@ const appsRoutes = require('./routes/apps');
 const tunnelRoutes = require('./routes/tunnel');
 const dbRoutes = require('./routes/db');
 const disksRoutes = require('./routes/disks');
+const dockerRoutes = require('./routes/docker');
 
 if (!process.env.DASHBOARD_TOKEN) {
   console.error('DASHBOARD_TOKEN non impostato. Copia .env.example in .env e imposta un token.');
@@ -45,6 +46,7 @@ app.use('/api/apps', httpAuth, appsRoutes);
 app.use('/api/tunnel', httpAuth, tunnelRoutes);
 app.use('/api/db', httpAuth, dbRoutes);
 app.use('/api/disks', httpAuth, disksRoutes);
+app.use('/api/docker', httpAuth, dockerRoutes);
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws/terminal' });

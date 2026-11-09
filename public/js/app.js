@@ -81,6 +81,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     if (btn.dataset.view === 'services-view') loadServices();
     if (btn.dataset.view === 'files-view') loadFiles('');
     if (btn.dataset.view === 'disks-view') loadDisks();
+    if (btn.dataset.view === 'docker-view') loadDocker();
     if (btn.dataset.view === 'wifi-view') loadWifi();
     if (btn.dataset.view === 'updates-view') resetUpdatesView();
     if (btn.dataset.view === 'github-view') loadGithubStatus();
@@ -98,6 +99,10 @@ function initApp() {
   loadSystem();
   setInterval(() => {
     if (!document.getElementById('system-view').classList.contains('hidden')) loadSystem();
+    if (!document.getElementById('docker-view').classList.contains('hidden')) {
+      loadDockerContainers();
+      loadDockerProjects();
+    }
   }, 5000);
 }
 
@@ -312,6 +317,302 @@ async function deleteEntry(p) {
   const d = await res.json();
   if (!res.ok) notyf.error(d.error);
   loadFiles(currentDir);
+}
+
+// --- Docker ---
+async function dockerApi(path, opts = {}) {
+  const res = await fetch('/api/docker/' + path, {
+    ...opts,
+    headers: { ...authHeaders(), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+  });
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error || 'errore');
+  return d;
+}
+
+// Segue un job in background (build, pull, up...) scrivendone l'output man mano.
+async function trackDockerJob(jobId, outEl, onDone) {
+  outEl.parentElement.classList.remove('hidden');
+  for (;;) {
+    let j;
+    try {
+      j = await dockerApi('jobs/' + jobId);
+    } catch (err) {
+      outEl.textContent += '\n' + err.message;
+      break;
+    }
+    const atBottom = outEl.scrollTop + outEl.clientHeight >= outEl.scrollHeight - 20;
+    outEl.textContent = j.output || 'In corso...';
+    if (atBottom) outEl.scrollTop = outEl.scrollHeight;
+    if (!j.running) {
+      if (j.code === 0) notyf.success('Completato: ' + j.label);
+      else notyf.error('Fallito (' + j.code + '): ' + j.label);
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  if (onDone) onDone();
+}
+
+function dockerShowOutput(title, text) {
+  document.getElementById('docker-out-title').textContent = title;
+  document.getElementById('docker-out').textContent = text;
+  document.getElementById('docker-out-card').classList.remove('hidden');
+}
+
+async function dockerStartJob(path, title, body = {}) {
+  try {
+    const { job } = await dockerApi(path, { method: 'POST', body: JSON.stringify(body) });
+    dockerShowOutput(title, 'In corso...');
+    trackDockerJob(job, document.getElementById('docker-out'), loadDocker);
+  } catch (err) {
+    notyf.error(err.message);
+  }
+}
+
+const DOCKER_STATE_CLASS = {
+  running: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400',
+  exited: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+};
+
+async function loadDocker() {
+  const msg = document.getElementById('docker-msg');
+  const main = document.getElementById('docker-main');
+  let st;
+  try {
+    st = await dockerApi('status');
+  } catch (err) {
+    msg.textContent = 'Errore: ' + err.message;
+    msg.classList.remove('hidden');
+    main.classList.add('hidden');
+    return;
+  }
+  if (!st.installed || !st.running) {
+    msg.textContent = !st.installed ? 'Docker non è installato su questo Pi.' : 'Docker è installato ma non risponde' + (st.error ? ': ' + st.error : '') + '.';
+    msg.classList.remove('hidden');
+    main.classList.add('hidden');
+    return;
+  }
+  msg.classList.add('hidden');
+  main.classList.remove('hidden');
+
+  const df = Object.fromEntries((st.df || []).map((r) => [r.Type, r]));
+  const reclaim = (df.Images && df.Images.Reclaimable) || '—';
+  document.getElementById('docker-cards').innerHTML = [
+    statCard('os', 'Docker', 'v' + esc(st.version) + (st.compose ? ' · Compose ' + esc(st.compose) : '')),
+    statCard('load', 'Container attivi', `${esc(st.containersRunning)} / ${esc(st.containers)}`),
+    statCard('disk', 'Immagini', `${esc(st.images)} · ${esc((df.Images && df.Images.Size) || '—')}`),
+    statCard('ram', 'Recuperabile', esc(reclaim)),
+  ].join('');
+
+  loadDockerProjects();
+  loadDockerContainers();
+  loadDockerImages();
+}
+
+async function loadDockerProjects() {
+  const tbody = document.querySelector('#docker-projects-table tbody');
+  try {
+    const { projects } = await dockerApi('projects');
+    tbody.innerHTML = projects
+      .map((p) => {
+        const n = jsArg(p.name);
+        const btn = (a, label, cls = 'btn-secondary') => `<button class="${cls} !px-2 !py-1 text-xs" onclick="dockerProjectAction(${n}, '${a}')">${label}</button>`;
+        const dir = p.files[0] ? p.files[0].replace(/[^/]+$/, '') : '';
+        return `<tr>
+          <td>${esc(p.name)}</td>
+          <td>${esc(p.status)}</td>
+          <td class="font-mono text-xs">${esc(dir)}</td>
+          <td class="flex flex-wrap gap-1">
+            ${btn('up', 'Avvia', 'btn')} ${btn('stop', 'Ferma')} ${btn('restart', 'Riavvia')} ${btn('upbuild', 'Build e avvia')} ${btn('pull', 'Aggiorna immagini')}
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="dockerProjectLogs(${n})">Log</button>
+            ${btn('down', 'Spegni e rimuovi', 'btn-danger')}
+          </td>
+        </tr>`;
+      })
+      .join('') || '<tr><td colspan="4" class="text-gray-500 dark:text-gray-400">Nessun progetto Compose</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + esc(err.message) + '</td></tr>';
+  }
+}
+
+function dockerProjectAction(name, action) {
+  if (action === 'down' && !confirm(`Spegnere e rimuovere i container del progetto "${name}"? I volumi (dati) restano.`)) return;
+  dockerStartJob('projects/' + encodeURIComponent(name) + '/' + action, name + ': ' + action);
+}
+
+async function dockerProjectLogs(name) {
+  try {
+    const d = await dockerApi('projects/' + encodeURIComponent(name) + '/logs');
+    dockerShowOutput('Log: ' + name, d.logs || '(nessun log)');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+}
+
+async function loadDockerContainers() {
+  const tbody = document.querySelector('#docker-containers-table tbody');
+  try {
+    const { containers } = await dockerApi('containers');
+    tbody.innerHTML = containers
+      .map((c) => {
+        const id = jsArg(c.id);
+        const running = c.state === 'running';
+        const act = (a, label, cls = 'btn-secondary') => `<button class="${cls} !px-2 !py-1 text-xs" onclick="dockerContainerAction(${id}, '${a}', ${jsArg(c.name)})">${label}</button>`;
+        return `<tr>
+          <td>${esc(c.name)}${c.project ? `<div class="text-xs text-gray-500 dark:text-gray-400">${esc(c.project)}</div>` : ''}</td>
+          <td class="text-xs">${esc(c.image)}</td>
+          <td><span class="badge ${DOCKER_STATE_CLASS[c.state] || 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'}">${esc(c.state)}</span><div class="text-xs text-gray-500 dark:text-gray-400">${esc(c.status)}</div></td>
+          <td class="text-xs">${esc(c.ports || '—')}</td>
+          <td class="text-xs" id="dstat-${esc(c.id)}">${running ? '…' : '—'}</td>
+          <td class="flex flex-wrap gap-1">
+            ${running ? act('stop', 'Ferma') + ' ' + act('restart', 'Riavvia') : act('start', 'Avvia', 'btn')}
+            <button class="btn-secondary !px-2 !py-1 text-xs" onclick="dockerContainerLogs(${id}, ${jsArg(c.name)})">Log</button>
+            ${running ? '' : act('remove', 'Rimuovi', 'btn-danger')}
+          </td>
+        </tr>`;
+      })
+      .join('') || '<tr><td colspan="6" class="text-gray-500 dark:text-gray-400">Nessun container</td></tr>';
+    if (containers.some((c) => c.state === 'running')) loadDockerStats();
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6">Errore: ' + esc(err.message) + '</td></tr>';
+  }
+}
+
+async function loadDockerStats() {
+  try {
+    const { stats } = await dockerApi('stats');
+    stats.forEach((s) => {
+      const el = document.getElementById('dstat-' + s.id);
+      if (el) el.textContent = `${s.cpu} · ${s.mem.split(' / ')[0]}`;
+    });
+  } catch {}
+}
+
+async function dockerContainerAction(id, action, name) {
+  if (action === 'remove' && !confirm(`Rimuovere il container "${name}"? I volumi (dati) restano.`)) return;
+  try {
+    await dockerApi('containers/' + encodeURIComponent(id) + '/' + action, { method: 'POST', body: '{}' });
+    notyf.success('Fatto');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+  loadDocker();
+}
+
+async function dockerContainerLogs(id, name) {
+  try {
+    const d = await dockerApi('containers/' + encodeURIComponent(id) + '/logs');
+    dockerShowOutput('Log: ' + name, d.logs || '(nessun log)');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+}
+
+async function loadDockerImages() {
+  const tbody = document.querySelector('#docker-images-table tbody');
+  try {
+    const { images } = await dockerApi('images');
+    tbody.innerHTML = images
+      .map((i) => `<tr>
+        <td>${esc(i.repository)}:${esc(i.tag)}<div class="font-mono text-xs text-gray-500 dark:text-gray-400">${esc(i.id)}</div></td>
+        <td>${esc(i.size)}</td>
+        <td class="text-xs">${esc(i.created)}</td>
+        <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="dockerRemoveImage(${jsArg(i.id)}, ${jsArg(i.repository + ':' + i.tag)})">Rimuovi</button></td>
+      </tr>`)
+      .join('') || '<tr><td colspan="4" class="text-gray-500 dark:text-gray-400">Nessuna immagine</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4">Errore: ' + esc(err.message) + '</td></tr>';
+  }
+}
+
+async function dockerRemoveImage(id, name) {
+  if (!confirm(`Rimuovere l'immagine "${name}"?`)) return;
+  try {
+    await dockerApi('images/' + encodeURIComponent(id), { method: 'DELETE' });
+    notyf.success('Immagine rimossa');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+  loadDocker();
+}
+
+function dockerPull() {
+  const input = document.getElementById('docker-pull-name');
+  const name = input.value.trim();
+  if (!name) return;
+  input.value = '';
+  dockerStartJob('images/pull', 'pull ' + name, { name });
+}
+
+async function dockerPrune(what) {
+  const labels = {
+    containers: 'tutti i container fermi',
+    images: 'le immagini orfane',
+    'images-all': 'TUTTE le immagini non usate da un container (andranno riscaricate o ricostruite)',
+    builder: 'la cache di build',
+  };
+  if (!confirm('Rimuovere ' + labels[what] + '?')) return;
+  try {
+    const d = await dockerApi('prune', { method: 'POST', body: JSON.stringify({ what }) });
+    notyf.success(d.output || 'Fatto');
+  } catch (err) {
+    notyf.error(err.message);
+  }
+  loadDocker();
+}
+
+// --- Docker nella pagina di dettaglio di una app clonata ---
+async function loadAppDocker(id) {
+  const box = document.getElementById('app-detail-docker');
+  const badge = document.getElementById('app-detail-docker-status');
+  document.getElementById('app-detail-docker-out').textContent = '';
+  badge.innerHTML = '';
+  try {
+    const d = await dockerApi('apps/' + encodeURIComponent(id));
+    if (currentAppDetailId !== id) return;
+    if (!d.composeFile) {
+      box.textContent = d.dockerfile
+        ? 'Trovato un Dockerfile ma non un docker-compose.yml: aggiungilo alla repo per gestirla da qui.'
+        : 'Nessun Dockerfile né docker-compose.yml in questa repo.';
+      return;
+    }
+    const st = d.project ? d.project.status : 'non avviato';
+    badge.innerHTML = `<span class="badge ${/running/.test(st) ? DOCKER_STATE_CLASS.running : DOCKER_STATE_CLASS.exited}">${esc(st)}</span>`;
+    const b = (a, label, cls = 'btn-secondary') => `<button class="${cls}" onclick="appDockerAction(${jsArg(id)}, '${a}')">${label}</button>`;
+    box.innerHTML = `<div class="mb-2">File: <span class="font-mono">${esc(d.composeFile)}</span></div>
+      <div class="flex flex-wrap gap-2">
+        ${b('upbuild', 'Build e avvia', 'btn')} ${b('up', 'Avvia')} ${b('stop', 'Ferma')} ${b('restart', 'Riavvia')} ${b('pull', 'Aggiorna immagini')}
+        ${d.project ? `<button class="btn-secondary" onclick="appDockerLogs(${jsArg(d.project.name)})">Log</button>` : ''}
+        ${b('down', 'Spegni e rimuovi', 'btn-danger')}
+      </div>`;
+  } catch (err) {
+    box.textContent = 'Errore: ' + err.message;
+  }
+}
+
+async function appDockerAction(id, action) {
+  if (action === 'down' && !confirm('Spegnere e rimuovere i container di questa app? I volumi (dati) restano.')) return;
+  const out = document.getElementById('app-detail-docker-out');
+  out.textContent = 'In corso...';
+  try {
+    const { job } = await dockerApi('apps/' + encodeURIComponent(id) + '/' + action, { method: 'POST', body: '{}' });
+    await trackDockerJob(job, out);
+  } catch (err) {
+    out.textContent = '';
+    notyf.error(err.message);
+  }
+  if (currentAppDetailId === id) loadAppDocker(id);
+}
+
+async function appDockerLogs(project) {
+  const out = document.getElementById('app-detail-docker-out');
+  try {
+    const d = await dockerApi('projects/' + encodeURIComponent(project) + '/logs');
+    out.textContent = d.logs || '(nessun log)';
+  } catch (err) {
+    notyf.error(err.message);
+  }
 }
 
 // --- Dischi ---
@@ -795,6 +1096,7 @@ async function openAppDetail(id) {
   document.getElementById('app-detail-title').textContent = app ? app.fullName : id;
   updateDetailProcessUI();
   loadAppEnv();
+  loadAppDocker(id);
   currentAppFile = null;
   document.getElementById('app-detail-file-editor-wrap').classList.add('hidden');
   loadAppFiles('');

@@ -139,6 +139,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>
         Dischi
       </button>
+      <button class="side-link" data-view="docker-view">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>
+        Docker
+      </button>
       <button class="side-link" data-view="wifi-view">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856a9.75 9.75 0 0113.788 0M1.924 8.674a14.25 14.25 0 0120.152 0M12 18.75h.008v.008H12v-.008z" /></svg>
         WiFi
@@ -215,6 +219,74 @@
           <span id="disks-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
         </div>
         <div id="disks-list" class="space-y-4"></div>
+      </div>
+
+      <div id="docker-view" class="view hidden space-y-4">
+        <div id="docker-msg" class="card hidden text-sm"></div>
+        <div id="docker-main" class="space-y-4">
+          <div id="docker-cards" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"></div>
+
+          <div id="docker-out-card" class="card hidden space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <h3 id="docker-out-title" class="section-title">Output</h3>
+              <div class="flex gap-1.5">
+                <button class="btn-secondary !px-2 !py-1 text-xs" onclick="copyText(document.getElementById('docker-out').textContent, this)">Copia</button>
+                <button class="btn-secondary !px-2 !py-1 text-xs" onclick="document.getElementById('docker-out-card').classList.add('hidden')">Chiudi</button>
+              </div>
+            </div>
+            <pre id="docker-out" class="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
+          </div>
+
+          <div>
+            <h3 class="mb-2 section-title">Progetti Compose</h3>
+            <div class="card overflow-x-auto !p-0">
+              <table id="docker-projects-table" class="table-base">
+                <thead><tr><th>Progetto</th><th>Stato</th><th>Cartella</th><th>Azioni</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <h3 class="section-title">Container</h3>
+              <button class="btn-secondary !px-2 !py-1 text-xs" onclick="loadDocker()">Aggiorna</button>
+            </div>
+            <div class="card overflow-x-auto !p-0">
+              <table id="docker-containers-table" class="table-base">
+                <thead><tr><th>Nome</th><th>Immagine</th><th>Stato</th><th>Porte</th><th>CPU / RAM</th><th>Azioni</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 class="section-title">Immagini</h3>
+              <div class="flex flex-wrap gap-2">
+                <input id="docker-pull-name" class="input !py-1 text-xs" placeholder="es. postgres:17" />
+                <button class="btn-secondary !px-2 !py-1 text-xs" onclick="dockerPull()">Scarica</button>
+              </div>
+            </div>
+            <div class="card overflow-x-auto !p-0">
+              <table id="docker-images-table" class="table-base">
+                <thead><tr><th>Immagine</th><th>Dimensione</th><th>Creata</th><th>Azioni</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card space-y-2">
+            <h3 class="section-title">Pulizia</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Libera spazio sul disco. I volumi (i dati dei database) non vengono mai toccati.</p>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-secondary" onclick="dockerPrune('containers')">Rimuovi container fermi</button>
+              <button class="btn-secondary" onclick="dockerPrune('images')">Rimuovi immagini orfane</button>
+              <button class="btn-secondary" onclick="dockerPrune('images-all')">Rimuovi tutte le immagini non usate</button>
+              <button class="btn-secondary" onclick="dockerPrune('builder')">Svuota cache di build</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="wifi-view" class="view hidden space-y-4">
@@ -392,6 +464,15 @@
             </div>
           </div>
           <div id="app-detail-git" class="text-sm"></div>
+        </div>
+
+        <div class="card space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="section-title">Docker</h3>
+            <div id="app-detail-docker-status" class="flex items-center gap-1.5"></div>
+          </div>
+          <div id="app-detail-docker" class="text-sm text-gray-500 dark:text-gray-400">Verifica...</div>
+          <pre id="app-detail-docker-out" class="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100 empty:hidden"></pre>
         </div>
 
         <div class="card space-y-3">
