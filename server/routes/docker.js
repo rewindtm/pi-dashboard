@@ -312,6 +312,11 @@ router.post('/apps/:id/dockerize', (req, res) => {
   if (existing.length && !overwrite) return res.status(409).json({ error: 'file già esistenti', existing });
   try {
     for (const n of names) fs.writeFileSync(path.join(ctx.d.dir, n), files[n], 'utf8');
+    // Le cartelle montate come volume vanno create col tuo utente, altrimenti le crea Docker come root.
+    for (const m of (files['docker-compose.yml'] || '').matchAll(/^\s+- \.\/([A-Za-z0-9._-]+):\/app\/\1(?::ro)?\s*$/gm)) {
+      const p = path.join(ctx.d.dir, m[1]);
+      if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+    }
     // .env.docker (variabili riscritte verso l'host) contiene segreti: lo si genera solo qui, mai nell'anteprima.
     let envDocker = false;
     if (mode === 'bridge') {

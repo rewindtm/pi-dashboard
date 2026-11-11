@@ -249,6 +249,9 @@ function analyze(dir, mode) {
   a.readonlyDirs = READONLY_DIRS.filter((d) => exists(dir, d) && fs.statSync(path.join(dir, d)).isDirectory());
   a.localVars = localhostVars(env);
   a.workers = a.kind === 'node' ? detectWorkers(dir, pkg, a.start) : [];
+  // Con più servizi serve almeno una cartella condivisa (il worker legge ciò che l'app scrive): i container hanno
+  // filesystem separati. "data" è la convenzione; la cartella può non esistere nel clone perché vuota.
+  if (a.workers.length && !a.dataDirs.includes('data')) a.dataDirs.unshift('data');
   if (a.workers.length) warnings.push(`Processi accessori rilevati: ${a.workers.join(', ')}. Ognuno diventa un servizio separato nel docker-compose.yml (stessa immagine, stesso .env).`);
 
   // Modalità di rete: "host" se l'app parla con servizi su localhost (database sul Pi) o con i propri worker
@@ -263,6 +266,7 @@ function analyze(dir, mode) {
   }
   if (a.mode === 'host') warnings.push('Modalità "host": il container usa direttamente le porte e la rete del Pi, quindi non possono girare insieme il processo normale e il container sulla stessa porta.');
   if (!hasEnv) warnings.push('Manca il file .env: l\'app potrebbe non avere configurazione/segreti. Crealo dalla sezione .env prima di avviare.');
+  if (a.workers.length) warnings.push(`App e worker sono container separati: condividono i file solo tramite le cartelle montate (${a.dataDirs.join(', ')}). Se l'app scrive file altrove, aggiungi un volume.`);
   if (a.readonlyDirs.length) warnings.push(`La cartella ${a.readonlyDirs.join(', ')} (di solito credenziali) viene montata in sola lettura e non entra nell'immagine.`);
 
   a.files = {
