@@ -571,10 +571,13 @@ async function loadAppDocker(id) {
   try {
     const d = await dockerApi('apps/' + encodeURIComponent(id));
     if (currentAppDetailId !== id) return;
+    const dz = document.getElementById('app-detail-dockerize');
+    if (dz) dz.innerHTML = '';
     if (!d.composeFile) {
-      box.textContent = d.dockerfile
-        ? 'Trovato un Dockerfile ma non un docker-compose.yml: aggiungilo alla repo per gestirla da qui.'
-        : 'Nessun Dockerfile né docker-compose.yml in questa repo.';
+      box.innerHTML = `<div class="mb-2">${d.dockerfile
+        ? 'Trovato un Dockerfile ma non un docker-compose.yml.'
+        : 'Nessun Dockerfile né docker-compose.yml in questa repo.'}</div>
+        <button class="btn" onclick="dockerizeOpen(${jsArg(id)})">Converti in Docker</button>`;
       return;
     }
     const st = d.project ? d.project.status : 'non avviato';
@@ -585,6 +588,7 @@ async function loadAppDocker(id) {
         ${b('upbuild', 'Build e avvia', 'btn')} ${b('up', 'Avvia')} ${b('stop', 'Ferma')} ${b('restart', 'Riavvia')} ${b('pull', 'Aggiorna immagini')}
         ${d.project ? `<button class="btn-secondary" onclick="appDockerLogs(${jsArg(d.project.name)})">Log</button>` : ''}
         ${b('down', 'Spegni e rimuovi', 'btn-danger')}
+        <button class="btn-secondary" onclick="dockerizeOpen(${jsArg(id)})">Rigenera file Docker</button>
       </div>`;
   } catch (err) {
     box.textContent = 'Errore: ' + err.message;
@@ -603,6 +607,76 @@ async function appDockerAction(id, action) {
     notyf.error(err.message);
   }
   if (currentAppDetailId === id) loadAppDocker(id);
+}
+
+// --- Conversione repo -> Docker ---
+let dockerizeState = null;
+
+async function dockerizeOpen(id, mode) {
+  const box = document.getElementById('app-detail-dockerize');
+  box.innerHTML = '<div class="text-sm">Analisi della repo...</div>';
+  try {
+    const a = await dockerApi('apps/' + encodeURIComponent(id) + '/dockerize' + (mode ? '?mode=' + mode : ''));
+    if (currentAppDetailId !== id) return;
+    dockerizeState = { id, mode: a.mode, existing: a.existing };
+    const warn = a.warnings.map((w) => `<li>${esc(w)}</li>`).join('');
+    const ta = (name, text) => `<div><div class="mb-1 font-mono text-xs">${esc(name)}</div>
+      <textarea data-dz-file="${esc(name)}" spellcheck="false" rows="${Math.min(18, text.split('\n').length + 1)}" class="w-full rounded-lg border border-gray-300 bg-white p-2 font-mono text-xs dark:border-gray-700 dark:bg-gray-900">${esc(text)}</textarea></div>`;
+    box.innerHTML = `<div class="rounded-lg border border-gray-300 p-3 text-sm dark:border-gray-700">
+        <div>Rilevato: <b>${esc(a.label)}</b>${a.port ? ` · porta <b>${a.port}</b>` : ''}${a.nodeVersion ? ` · Node ${a.nodeVersion}` : ''}</div>
+        <label class="mt-2 flex flex-wrap items-center gap-2">Rete:
+          <select class="input" onchange="dockerizeOpen(${jsArg(id)}, this.value)">
+            <option value="host" ${a.mode === 'host' ? 'selected' : ''}>host (usa porte e database del Pi)</option>
+            <option value="bridge" ${a.mode === 'bridge' ? 'selected' : ''}>isolata (porta solo su 127.0.0.1)</option>
+          </select>
+        </label>
+        ${warn ? `<ul class="mt-2 list-disc space-y-1 pl-5 text-amber-600 dark:text-amber-400">${warn}</ul>` : ''}
+      </div>
+      ${Object.entries(a.files).map(([n, t]) => ta(n, t)).join('')}
+      ${a.existing.length ? `<div class="text-sm text-amber-600 dark:text-amber-400">Esistono già e verranno sovrascritti: ${esc(a.existing.join(', '))}</div>` : ''}
+      <div class="flex flex-wrap gap-2">
+        <button class="btn" onclick="dockerizeWrite(false)">Crea file</button>
+        <button class="btn-secondary" onclick="dockerizeWrite(true)">Crea file, build e avvia</button>
+        <button class="btn-secondary" onclick="dockerizeCommit()">Salva nella repo (commit + push)</button>
+        <button class="btn-secondary" onclick="document.getElementById('app-detail-dockerize').innerHTML=''">Chiudi</button>
+      </div>`;
+  } catch (err) {
+    box.innerHTML = '';
+    notyf.error(err.message);
+  }
+}
+
+async function dockerizeWrite(andRun) {
+  const s = dockerizeState;
+  if (!s) return;
+  const files = {};
+  document.querySelectorAll('#app-detail-dockerize [data-dz-file]').forEach((t) => { files[t.dataset.dzFile] = t.value; });
+  try {
+    const r = await dockerApi('apps/' + encodeURIComponent(s.id) + '/dockerize', {
+      method: 'POST',
+      body: JSON.stringify({ mode: s.mode, files, overwrite: true }),
+    });
+    notyf.success('File creati: ' + r.written.join(', '));
+    if (andRun) {
+      document.getElementById('app-detail-dockerize').innerHTML = '';
+      await loadAppDocker(s.id);
+      return appDockerAction(s.id, 'upbuild');
+    }
+    loadAppDocker(s.id);
+  } catch (err) {
+    notyf.error(err.message);
+  }
+}
+
+async function dockerizeCommit() {
+  const s = dockerizeState;
+  if (!s || !confirm('Fare commit e push di Dockerfile, docker-compose.yml e .dockerignore sulla repo? (il .env non viene mai incluso)')) return;
+  try {
+    const r = await dockerApi('apps/' + encodeURIComponent(s.id) + '/dockerize/commit', { method: 'POST', body: '{}' });
+    notyf.success(r.message);
+  } catch (err) {
+    notyf.error(err.message);
+  }
 }
 
 async function appDockerLogs(project) {

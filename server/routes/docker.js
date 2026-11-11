@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { readJson } = require('../store');
+const dockerize = require('../dockerize');
 
 const router = express.Router();
 router.use(express.json());
@@ -274,6 +275,77 @@ router.get('/apps/:id', async (req, res) => {
     } catch {}
   }
   res.json({ composeFile: d.compose ? path.basename(d.compose) : null, dockerfile: d.dockerfile, project });
+});
+
+// --- Conversione di una repo in Docker: analisi, scrittura dei file, commit ---
+const GEN_FILES = ['Dockerfile', 'docker-compose.yml', '.dockerignore'];
+
+function appForDockerize(req, res) {
+  const app = readJson('apps.json', []).find((a) => a.id === req.params.id);
+  if (!app) return res.status(404).json({ error: 'app non trovata' }) && null;
+  const d = findAppDocker(app);
+  if (!d) return res.status(404).json({ error: 'cartella dell\'app non trovata' }) && null;
+  return { app, d };
+}
+
+router.get('/apps/:id/dockerize', (req, res) => {
+  const ctx = appForDockerize(req, res);
+  if (!ctx) return;
+  const mode = ['host', 'bridge'].includes(req.query.mode) ? req.query.mode : null;
+  try {
+    res.json(dockerize.analyze(ctx.d.dir, mode));
+  } catch (err) {
+    res.status(500).json({ error: 'analisi fallita: ' + err.message });
+  }
+});
+
+router.post('/apps/:id/dockerize', (req, res) => {
+  const ctx = appForDockerize(req, res);
+  if (!ctx) return;
+  const { mode, files, overwrite } = req.body || {};
+  if (!files || typeof files !== 'object') return res.status(400).json({ error: 'file mancanti' });
+  const names = Object.keys(files);
+  if (!names.length || names.some((n) => !GEN_FILES.includes(n) || typeof files[n] !== 'string' || files[n].length > 100000)) {
+    return res.status(400).json({ error: 'file non consentiti' });
+  }
+  const existing = names.filter((n) => fs.existsSync(path.join(ctx.d.dir, n)));
+  if (existing.length && !overwrite) return res.status(409).json({ error: 'file già esistenti', existing });
+  try {
+    for (const n of names) fs.writeFileSync(path.join(ctx.d.dir, n), files[n], 'utf8');
+    // .env.docker (variabili riscritte verso l'host) contiene segreti: lo si genera solo qui, mai nell'anteprima.
+    let envDocker = false;
+    if (mode === 'bridge') {
+      const a = dockerize.analyze(ctx.d.dir, 'bridge');
+      const content = dockerize.buildEnvDocker(ctx.d.dir, a.envDocker || []);
+      if (content) {
+        fs.writeFileSync(path.join(ctx.d.dir, '.env.docker'), content, { encoding: 'utf8', mode: 0o600 });
+        envDocker = true;
+      }
+    }
+    res.json({ written: names, envDocker });
+  } catch (err) {
+    res.status(500).json({ error: 'scrittura fallita: ' + err.message });
+  }
+});
+
+// Commit e push dei soli file generati (mai .env / .env.docker).
+router.post('/apps/:id/dockerize/commit', async (req, res) => {
+  const ctx = appForDockerize(req, res);
+  if (!ctx) return;
+  const cwd = ctx.d.dir;
+  const git = (args, timeout = 60000) =>
+    new Promise((resolve) => execFile('git', args, { cwd, timeout, env: childEnv() }, (err, stdout, stderr) => resolve({ ok: !err, out: (stdout + stderr).trim() })));
+  const present = GEN_FILES.filter((n) => fs.existsSync(path.join(cwd, n)));
+  if (!present.length) return res.status(400).json({ error: 'nessun file Docker da salvare' });
+  const add = await git(['add', '--', ...present]);
+  if (!add.ok) return res.status(500).json({ error: 'git add fallito', detail: add.out });
+  const staged = await git(['diff', '--cached', '--quiet', '--', ...present]);
+  if (staged.ok) return res.json({ message: 'Niente da salvare: i file sono già nella repo.' });
+  const commit = await git(['-c', 'user.name=Pi Dashboard', '-c', 'user.email=pi-dashboard@localhost', 'commit', '-m', 'Aggiunti file Docker (generati dalla Pi Dashboard)', '--', ...present]);
+  if (!commit.ok) return res.status(500).json({ error: 'commit fallito', detail: commit.out });
+  const push = await git(['push'], 120000);
+  if (!push.ok) return res.status(502).json({ error: 'commit creato ma push fallito', detail: push.out.replace(/x-access-token:[^@\s]+@/g, '') });
+  res.json({ message: 'Commit e push eseguiti.' });
 });
 
 router.post('/apps/:id/:action', (req, res) => {
