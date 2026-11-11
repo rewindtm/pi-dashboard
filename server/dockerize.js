@@ -146,21 +146,50 @@ function dockerignore(a) {
   return base.concat(a.dataDirs.map((d) => d), a.readonlyDirs.map((d) => d)).join('\n') + '\n';
 }
 
+// Processi accessori (worker, cron, code) lanciati a parte con "node file.js": ognuno diventa un servizio.
+const WORKER_FILE = /(worker|cron|queue|consumer|scheduler)/i;
+function detectWorkers(dir, pkg, mainCmd) {
+  const found = new Map();
+  const main = mainCmd && mainCmd[0] === 'node' ? mainCmd[1] : null;
+  const scripts = (pkg && pkg.scripts) || {};
+  for (const [name, cmd] of Object.entries(scripts)) {
+    if (/^(start|dev|build|test|lint)/.test(name)) continue;
+    const m = String(cmd).match(/^node\s+(?:--\S+\s+)*(\S+\.m?js)\s*$/);
+    if (m && m[1] !== main && exists(dir, m[1]) && WORKER_FILE.test(m[1])) found.set(m[1], m[1]);
+  }
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (/\.m?js$/.test(f) && f !== main && WORKER_FILE.test(f) && !/^(test|jest)/i.test(f) && fs.statSync(path.join(dir, f)).isFile()) found.set(f, f);
+    }
+  } catch {}
+  return [...found.keys()].sort();
+}
+
+function serviceName(file) {
+  return file.replace(/\.m?js$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+}
+
 function compose(a) {
-  const L = ['# Generato dalla Pi Dashboard: controlla e adatta prima dell\'uso.', 'services:', '  app:', '    build: .', '    restart: unless-stopped'];
-  if (a.hasEnv || a.envDocker.length) {
-    L.push('    env_file:');
-    if (a.hasEnv) L.push('      - path: .env', '        required: false');
-    if (a.mode === 'bridge' && a.envDocker.length) L.push('      - path: .env.docker', '        required: false');
-  }
-  if (a.mode === 'host') {
-    L.push('    network_mode: host');
-  } else {
-    if (a.port) L.push('    ports:', `      - "127.0.0.1:${a.port}:${a.kind === 'static' ? 80 : a.port}"`);
-    if (a.envDocker.length) L.push('    extra_hosts:', '      - "host.docker.internal:host-gateway"');
-  }
   const vols = a.dataDirs.map((d) => `      - ./${d}:/app/${d}`).concat(a.readonlyDirs.map((d) => `      - ./${d}:/app/${d}:ro`));
-  if (vols.length && a.kind !== 'static') L.push('    volumes:', ...vols);
+  const service = (name, isMain, file) => {
+    const L = [`  ${name}:`, '    build: .', '    restart: unless-stopped'];
+    if (!isMain) L.push(`    command: ${JSON.stringify(['node', file])}`);
+    if (a.hasEnv || a.envDocker.length) {
+      L.push('    env_file:');
+      if (a.hasEnv) L.push('      - path: .env', '        required: false');
+      if (a.mode === 'bridge' && a.envDocker.length) L.push('      - path: .env.docker', '        required: false');
+    }
+    if (a.mode === 'host') {
+      L.push('    network_mode: host');
+    } else {
+      if (isMain && a.port) L.push('    ports:', `      - "127.0.0.1:${a.port}:${a.kind === 'static' ? 80 : a.port}"`);
+      if (a.envDocker.length) L.push('    extra_hosts:', '      - "host.docker.internal:host-gateway"');
+    }
+    if (vols.length && a.kind !== 'static') L.push('    volumes:', ...vols);
+    return L;
+  };
+  const L = ['# Generato dalla Pi Dashboard: controlla e adatta prima dell\'uso.', 'services:', ...service('app', true)];
+  for (const w of a.workers || []) L.push('', ...service(serviceName(w), false, w));
   return L.join('\n') + '\n';
 }
 
@@ -219,9 +248,13 @@ function analyze(dir, mode) {
   a.dataDirs = DATA_DIRS.filter((d) => exists(dir, d) && fs.statSync(path.join(dir, d)).isDirectory());
   a.readonlyDirs = READONLY_DIRS.filter((d) => exists(dir, d) && fs.statSync(path.join(dir, d)).isDirectory());
   a.localVars = localhostVars(env);
+  a.workers = a.kind === 'node' ? detectWorkers(dir, pkg, a.start) : [];
+  if (a.workers.length) warnings.push(`Processi accessori rilevati: ${a.workers.join(', ')}. Ognuno diventa un servizio separato nel docker-compose.yml (stessa immagine, stesso .env).`);
 
-  // Modalità di rete: "host" se l'app parla con servizi su localhost (database sul Pi), altrimenti isolata.
-  a.mode = mode === 'host' || mode === 'bridge' ? mode : a.localVars.length ? 'host' : 'bridge';
+  // Modalità di rete: "host" se l'app parla con servizi su localhost (database sul Pi) o con i propri worker
+  // via 127.0.0.1, altrimenti isolata.
+  a.mode = mode === 'host' || mode === 'bridge' ? mode : a.localVars.length || a.workers.length ? 'host' : 'bridge';
+  if (a.mode === 'bridge' && a.workers.length) warnings.push('In modalità isolata ogni servizio ha la sua rete: se l\'app chiama i worker su 127.0.0.1 non li raggiungerà. Usa "host".');
   if (a.mode === 'bridge' && a.localVars.length) {
     a.envDocker = a.localVars;
     warnings.push(
