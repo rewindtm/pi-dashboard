@@ -63,10 +63,11 @@ function localhostVars(env) {
 
 function detectPort(dir, env, pkg, kind) {
   if (env.PORT && /^\d{2,5}$/.test(env.PORT)) return Number(env.PORT);
-  const candidates = [pkg && pkg.main, 'server.js', 'index.js', 'app.js', 'src/index.js', 'src/server.js', 'server/index.js'].filter(Boolean);
+  const candidates = [pkg && pkg.main, 'server.js', 'index.js', 'app.js', 'src/index.js', 'src/server.js', 'server/index.js', 'src/index.ts', 'server/src/index.ts', 'server/src/index.js', 'server/index.ts', 'backend/src/index.ts', 'backend/src/index.js'].filter(Boolean);
   for (const c of candidates) {
     try {
-      const m = fs.readFileSync(path.join(dir, c), 'utf8').match(/\.listen\(\s*(?:process\.env\.PORT\s*(?:\|\||\?\?)\s*)?(\d{2,5})/);
+      const text = fs.readFileSync(path.join(dir, c), 'utf8');
+      const m = text.match(/\.listen\(\s*(?:process\.env\.PORT\s*(?:\|\||\?\?)\s*)?(\d{2,5})/) || text.match(/PORT\s*(?:\|\||\?\?)\s*(\d{2,5})/);
       if (m) return Number(m[1]);
     } catch {}
   }
@@ -100,7 +101,11 @@ function dockerfileNode(a) {
     lines.push(`# Moduli nativi rilevati (${a.nativeDeps.join(', ')}): servono gli strumenti di compilazione.`);
     lines.push('RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*', '');
   }
-  lines.push('COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./', `RUN ${a.install.run}`, '', 'COPY . .', '');
+  if (a.installNeedsSources) {
+    lines.push('# Lo script "postinstall" lavora su sottocartelle: servono i sorgenti già copiati prima dell\'install.', 'COPY . .', `RUN ${a.install.run}`, '');
+  } else {
+    lines.push('COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./', `RUN ${a.install.run}`, '', 'COPY . .', '');
+  }
   if (a.build) {
     lines.push(`RUN ${a.install.pm === 'npm' ? 'npm run build' : a.install.pm + ' run build'}`);
     if (a.install.pm === 'npm') lines.push('RUN npm prune --omit=dev');
@@ -210,9 +215,14 @@ function analyze(dir, mode) {
     a.label = { next: 'Next.js', static: 'Sito statico (build + nginx)', node: has(BOT_DEPS) && !has(SERVER_DEPS) ? 'Bot / servizio Node' : 'Server Node.js' }[a.kind];
     a.nodeVersion = nodeMajor(pkg);
     a.install = installCommand(dir);
+    const post = String(scripts.postinstall || '');
+    a.installNeedsSources = /--prefix|cd\s|workspaces?|build/.test(post) || !!pkg.workspaces;
+    if (a.installNeedsSources) warnings.push('Lo script "postinstall" (o i workspaces) usa le sottocartelle: nel Dockerfile i sorgenti vengono copiati prima di "npm ci", quindi ogni modifica reinstalla le dipendenze.');
     if (a.install.noLock) warnings.push('Nessun file di lock (package-lock.json): le versioni delle dipendenze non sono fissate.');
     a.build = !!scripts.build && a.kind !== 'static';
     if (a.kind === 'next') a.build = true;
+    // Con il postinstall che compila già i sottoprogetti il build è fatto; e senza prune: tsx/ts-node servono a runtime.
+    if (a.installNeedsSources && a.kind !== 'next') a.build = false;
     a.nativeDeps = NATIVE_DEPS.filter((d) => deps[d]);
     a.staticOut = exists(dir, 'build') && !exists(dir, 'dist') ? 'build' : 'dist';
     a.port = detectPort(dir, env, pkg, a.kind);
