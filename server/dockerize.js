@@ -95,11 +95,46 @@ function installCommand(dir) {
   return { run: 'npm install', pm: 'npm', noLock: true };
 }
 
+
+// Programmi di sistema che il codice lancia (child_process): nell'immagine node slim non ci sono.
+const SYSTEM_TOOLS = [
+  { name: 'LibreOffice', re: /['"` \/](soffice|libreoffice)['"` .]/i, pkgs: ['libreoffice-writer', 'fonts-liberation', 'fonts-dejavu-core', 'fonts-crosextra-carlito', 'fonts-crosextra-caladea'] },
+  { name: 'ffmpeg', re: /['"` \/]ffmpeg['"` .]/i, pkgs: ['ffmpeg'] },
+  { name: 'poppler', re: /['"` \/](pdftoppm|pdftotext|pdfimages)['"` .]/i, pkgs: ['poppler-utils'] },
+];
+
+function detectSystemTools(dir) {
+  const skip = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'data', 'public', 'uploads', 'coverage']);
+  const found = new Map();
+  let files = 0;
+  const walk = (d, depth) => {
+    if (depth > 4 || files > 400) return;
+    let list;
+    try { list = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of list) {
+      if (e.isDirectory()) { if (!skip.has(e.name) && !e.name.startsWith('.')) walk(path.join(d, e.name), depth + 1); continue; }
+      if (!/\.(js|cjs|mjs|ts)$/.test(e.name) || /^(test|jest)/i.test(e.name) || /\.(test|spec)\./.test(e.name)) continue;
+      files++;
+      let txt;
+      try { if (fs.statSync(path.join(d, e.name)).size > 400000) continue; txt = fs.readFileSync(path.join(d, e.name), 'utf8'); } catch { continue; }
+      if (!/child_process|exec|spawn/.test(txt)) continue;
+      for (const t of SYSTEM_TOOLS) if (!found.has(t.name) && t.re.test(txt)) found.set(t.name, t);
+    }
+  };
+  walk(dir, 0);
+  return [...found.values()];
+}
+
 function dockerfileNode(a) {
   const lines = ['# Generato dalla Pi Dashboard: controlla e adatta prima dell\'uso.', `FROM node:${a.nodeVersion}-bookworm-slim`, 'WORKDIR /app', ''];
   if (a.nativeDeps.length) {
     lines.push(`# Moduli nativi rilevati (${a.nativeDeps.join(', ')}): servono gli strumenti di compilazione.`);
     lines.push('RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*', '');
+  }
+  if (a.systemTools && a.systemTools.length) {
+    const pk = [...new Set(a.systemTools.flatMap((t) => t.pkgs))];
+    lines.push(`# Programmi di sistema usati dal codice (${a.systemTools.map((t) => t.name).join(', ')}).`);
+    lines.push(`RUN apt-get update && apt-get install -y --no-install-recommends ${pk.join(' ')} && rm -rf /var/lib/apt/lists/*`, '');
   }
   if (a.installNeedsSources) {
     lines.push('# Lo script "postinstall" lavora su sottocartelle: servono i sorgenti già copiati prima dell\'install.', 'COPY . .', `RUN ${a.install.run}`, '');
@@ -216,7 +251,7 @@ function analyze(dir, mode) {
     a.nodeVersion = nodeMajor(pkg);
     a.install = installCommand(dir);
     const post = String(scripts.postinstall || '');
-    a.installNeedsSources = /--prefix|cd\s|workspaces?|build/.test(post) || !!pkg.workspaces;
+    a.installNeedsSources = /--prefix|\bcd\s|\bworkspaces?\b|\bbuild\b/.test(post) || !!pkg.workspaces;
     if (a.installNeedsSources) warnings.push('Lo script "postinstall" (o i workspaces) usa le sottocartelle: nel Dockerfile i sorgenti vengono copiati prima di "npm ci", quindi ogni modifica reinstalla le dipendenze.');
     if (a.install.noLock) warnings.push('Nessun file di lock (package-lock.json): le versioni delle dipendenze non sono fissate.');
     a.build = !!scripts.build && a.kind !== 'static';
@@ -224,6 +259,8 @@ function analyze(dir, mode) {
     // Con il postinstall che compila già i sottoprogetti il build è fatto; e senza prune: tsx/ts-node servono a runtime.
     if (a.installNeedsSources && a.kind !== 'next') a.build = false;
     a.nativeDeps = NATIVE_DEPS.filter((d) => deps[d]);
+    a.systemTools = detectSystemTools(dir);
+    if (a.systemTools.length) warnings.push(`Il codice usa programmi di sistema (${a.systemTools.map((t) => t.name).join(', ')}): vengono installati nell'immagine con apt, che diventa più pesante (LibreOffice ~400 MB).`);
     a.staticOut = exists(dir, 'build') && !exists(dir, 'dist') ? 'build' : 'dist';
     a.port = detectPort(dir, env, pkg, a.kind);
     if (a.kind === 'static') {
