@@ -160,7 +160,7 @@ function detectWorkers(dir, pkg, mainCmd) {
   for (const [name, cmd] of Object.entries(scripts)) {
     if (/^(start|dev|build|test|lint)/.test(name)) continue;
     const m = String(cmd).match(/^node\s+(?:--\S+\s+)*(\S+\.m?js)\s*$/);
-    if (m && m[1] !== main && exists(dir, m[1]) && WORKER_FILE.test(m[1])) found.set(m[1], m[1]);
+    if (m && m[1] !== main && exists(dir, m[1]) && !/(^|\/)(test|jest)/i.test(m[1])) found.set(m[1], m[1]);
   }
   try {
     for (const f of fs.readdirSync(dir)) {
@@ -171,7 +171,7 @@ function detectWorkers(dir, pkg, mainCmd) {
 }
 
 function serviceName(file) {
-  return file.replace(/\.m?js$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return file.replace(/\.m?js$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function compose(a) {
