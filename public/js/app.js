@@ -706,42 +706,73 @@ async function loadDisks() {
     if (!res.ok) throw new Error(d.error || 'errore');
     document.getElementById('disks-setup').classList.toggle('hidden', d.helperInstalled);
     diskFormatTools = d.formatTools || {};
-    list.innerHTML = (d.raids || []).map(raidCard).join('') + (d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>');
+    const raids = d.raids || [];
+    list.innerHTML = (raids.length ? '<h2 class="font-display text-2xl font-bold">Volumi RAID</h2><div class="grid gap-4 lg:grid-cols-2">' + raids.map(raidCard).join('') + '</div>' : '')
+      + '<h2 class="mt-2 font-display text-2xl font-bold">Dischi fisici</h2>'
+      + (d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>');
   } catch (err) {
     list.innerHTML = '<div class="card text-sm">Errore: ' + esc(err.message) + '</div>';
   }
 }
 
+const ICON_STACK = '<svg class="h-7 w-7 shrink-0 text-gray-500 dark:text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></svg>';
+const ICON_DRIVE = '<svg class="h-6 w-6 shrink-0 text-gray-500 dark:text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 14h16v5H4zM4 14l2.5-8h11L20 14"/><circle cx="17" cy="16.5" r=".8" fill="currentColor"/></svg>';
+const ICON_SD = '<svg class="h-6 w-6 shrink-0 text-gray-500 dark:text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8 3h8l3 3v15H5V6l3-3Z"/><path d="M9 7v3M12 7v3M15 7v3"/></svg>';
+const ICON_CLOCK = '<svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const ICON_SPEED = '<svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 18a8 8 0 1 1 16 0"/><path d="m12 18 4-6"/></svg>';
+const ICON_MEMBERS = '<svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>';
+const ICON_MOUNT = '<svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 14h16v5H4zM4 14l2.5-8h11L20 14"/></svg>';
+const ICON_FS = '<svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>';
+
+function fmtEta(min) {
+  if (min == null) return null;
+  return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.round(min) + ' min';
+}
+
 function raidCard(a) {
   const bad = a.degraded || a.members.some((m) => m.failed);
-  const state = a.sync
-    ? ['bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400', 'sincronizzazione ' + a.sync.percent.toFixed(1) + '%']
+  const pill = a.sync
+    ? ['border-amber-500/60 bg-amber-500/10 text-amber-500', ICON_SYNC(), a.sync.action === 'check' ? 'Verifica in corso' : 'Ricostruzione in corso']
     : bad
-      ? ['bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400', 'degradato']
-      : ['bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400', 'sano'];
-  const eta = a.sync && a.sync.finishMin != null
-    ? `<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">${esc(a.sync.action)}: ancora circa ${a.sync.finishMin >= 60 ? Math.floor(a.sync.finishMin / 60) + ' h ' + Math.round(a.sync.finishMin % 60) + ' min' : Math.round(a.sync.finishMin) + ' min'}${a.sync.speedKB ? ' · ' + (a.sync.speedKB / 1024).toFixed(0) + ' MB/s' : ''}. Non riavviare né scollegare dischi finché non è completata.</div>`
-    : '';
-  const bar = a.sync
-    ? `<div class="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${a.sync.percent.toFixed(0)}%"></div></div>`
-    : '';
-  const pct = a.used != null && a.size ? Math.min(100, (a.used / a.size) * 100) : null;
-  const usage = pct == null ? '' : `<div class="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${pct.toFixed(0)}%"></div></div>
-    <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">${fmtBytes(a.used)} usati · ${fmtBytes(a.avail)} liberi</div>`;
-  const members = a.members
-    .map((m) => `<span class="badge ${m.failed ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'}">${esc(m.name)}${m.failed ? ' (guasto)' : ''}</span>`)
-    .join(' ');
-  return `<div class="card">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <div><h3 class="section-title">${esc((a.level || 'raid').replace('raid', 'RAID '))} ·${esc(a.name)}${a.label ? ' · ' + esc(a.label) : ''}</h3>
-        <div class="text-xs text-gray-500 dark:text-gray-400">${esc(a.path)} · ${fmtBytes(a.size)} · ${esc(a.fstype || '—')}${a.mountpoint ? ' · montato su <span class="font-mono">' + esc(a.mountpoint) + '</span>' : ''}</div></div>
-      <span class="badge ${state[0]}">${state[1]}${a.map ? ' [' + esc(a.map) + ']' : ''}</span>
+      ? ['border-red-500/60 bg-red-500/10 text-red-500', '', 'Degradato']
+      : ['border-green-500/60 bg-green-500/10 text-green-500', '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>', 'Sano'];
+  const stat = (icon, text) => `<div class="flex items-center gap-2 text-sm">${icon}<span>${text}</span></div>`;
+  const eta = a.sync ? fmtEta(a.sync.finishMin) : null;
+  const left = a.sync
+    ? `<div class="flex items-center gap-5">
+        <div class="font-display text-5xl font-bold leading-none">${a.sync.percent.toFixed(1).replace('.', ',')}%</div>
+        <div class="space-y-1.5 border-l border-gray-200 pl-5 dark:border-white/10">
+          ${eta ? stat(ICON_CLOCK, eta + ' rimanenti') : ''}
+          ${a.sync.speedKB ? stat(ICON_SPEED, (a.sync.speedKB / 1024).toFixed(0) + ' MB/s') : ''}
+          ${a.total != null ? stat(ICON_MEMBERS, `${a.working}/${a.total} membri attivi`) : ''}
+        </div></div>
+      <div class="mt-3 h-1.5 w-full overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${Math.max(a.sync.percent, 1).toFixed(0)}%"></div></div>
+      <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Non riavviare né scollegare dischi finché non è completata.</div>`
+    : `<div class="space-y-1.5">${a.total != null ? stat(ICON_MEMBERS, `${a.working}/${a.total} membri attivi`) : ''}
+        ${a.used != null ? stat(ICON_MOUNT, `${fmtBytes(a.used)} usati · ${fmtBytes(a.avail)} liberi`) : ''}</div>
+       ${a.used != null && a.size ? `<div class="mt-3 h-1.5 w-full overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${Math.min(100, (a.used / a.size) * 100).toFixed(0)}%"></div></div>` : ''}`;
+  const members = a.members.map((m) => `<span class="badge ${m.failed ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' : ''}">${esc(m.name)}${m.failed ? ' (guasto)' : ''}</span>`).join(' ');
+  return `<div class="card flex flex-col">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex items-center gap-3">${ICON_STACK}
+        <div><div class="font-display text-xl font-bold">${esc(a.label || a.name)}</div>
+          <div class="font-mono text-xs text-gray-500 dark:text-gray-400">${esc(a.path)} · ${esc((a.level || '').replace('raid', 'RAID '))}</div></div></div>
+      <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1 text-sm font-semibold ${pill[0]}">${pill[1]}${pill[2]}</span>
     </div>
-    <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Membri: ${members}${a.total != null ? ` · ${a.working}/${a.total} attivi` : ''}</div>
-    ${bar}${eta}${usage}
+    <div class="mt-4 flex-1">${left}</div>
+    <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-gray-200 pt-3 text-xs text-gray-500 dark:border-white/10 dark:text-gray-400">
+      <span class="flex items-center gap-1.5">${ICON_MOUNT}Montato su: <span class="font-mono text-gray-700 dark:text-gray-200">${esc(a.mountpoint || '—')}</span></span>
+      <span class="flex items-center gap-1.5">${ICON_FS}Filesystem: <span class="font-mono text-gray-700 dark:text-gray-200">${esc(a.fstype || '—')}</span></span>
+      <span class="flex items-center gap-1.5">Membri: ${members}</span>
+    </div>
   </div>`;
 }
 
+function ICON_SYNC() {
+  return '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14-4M4 4v4h4M4 13a8 8 0 0 0 14 4M20 20v-4h-4"/></svg>';
+}
+
+const diskOpen = {};
 function diskCard(disk) {
   const tags = [
     disk.system ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">sistema</span>' : '',
@@ -796,18 +827,31 @@ function diskCard(disk) {
           <button id="fmt-go-${esc(disk.name)}" class="btn-danger" disabled onclick="runDiskFormat(${jsArg(disk.path)}, ${jsArg(disk.name)})">Formatta disco</button>
         </div>
       </div>`;
-  return `<div class="card !p-0 overflow-x-auto">
-    <div class="flex flex-wrap items-center justify-between gap-2 p-4">
-      <div><h3 class="section-title">${esc(disk.model || disk.name)}</h3>
-        <div class="text-xs text-gray-500 dark:text-gray-400">${esc(disk.path)} · ${fmtBytes(disk.size)} ${tags}</div></div>
-      <div class="flex gap-2">${format} ${eject}</div>
+  const isRaid = disk.partitions.some((p) => p.raid);
+  const open = diskOpen[disk.name] ?? !isRaid;
+  const tag = (t) => `<span class="badge">${esc(t)}</span>`;
+  const chevron = '<svg class="chev h-5 w-5 shrink-0 text-gray-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>';
+  const icon = disk.name.startsWith('mmc') ? ICON_SD : ICON_DRIVE;
+  return `<details class="disk-card card !p-0 overflow-hidden" ${open ? 'open' : ''} ontoggle="diskOpen[${jsArg(disk.name)}] = this.open">
+    <summary class="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+      ${icon}
+      <span class="min-w-0 flex-1 truncate font-display text-lg font-bold">${esc(disk.model || (disk.name.startsWith('mmc') ? 'microSD' : disk.name))}</span>
+      <span class="hidden font-mono text-sm text-gray-500 dark:text-gray-400 sm:inline">${esc(disk.path)}</span>
+      <span class="hidden text-sm text-gray-500 dark:text-gray-400 sm:inline">${fmtBytes(disk.size)}</span>
+      <span class="flex items-center gap-1.5">${tags}</span>
+      ${chevron}
+    </summary>
+    <div class="border-t border-gray-200 dark:border-white/10">
+      <div class="flex justify-end gap-2 p-3 pb-0 empty:hidden">${format} ${eject}</div>
+      ${formatPanel}
+      <div class="overflow-x-auto">
+        <table class="table-base">
+          <thead><tr><th>Partizione</th><th>Filesystem</th><th>Dimensione</th><th>Montato su</th><th>Spazio</th><th>Azioni</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
-    ${formatPanel}
-    <table class="table-base">
-      <thead><tr><th>Partizione</th><th>Filesystem</th><th>Dimensione</th><th>Montato su</th><th>Spazio</th><th>Azioni</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
+  </details>`;
 }
 
 async function diskPost(path, body) {
