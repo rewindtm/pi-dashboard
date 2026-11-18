@@ -733,7 +733,7 @@ function raidCard(a) {
     .join(' ');
   return `<div class="card">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <div><h3 class="section-title">RAID ${esc((a.level || '').replace('raid', 'RAID '))} · ${esc(a.name)}${a.label ? ' · ' + esc(a.label) : ''}</h3>
+      <div><h3 class="section-title">${esc((a.level || 'raid').replace('raid', 'RAID '))} ·${esc(a.name)}${a.label ? ' · ' + esc(a.label) : ''}</h3>
         <div class="text-xs text-gray-500 dark:text-gray-400">${esc(a.path)} · ${fmtBytes(a.size)} · ${esc(a.fstype || '—')}${a.mountpoint ? ' · montato su <span class="font-mono">' + esc(a.mountpoint) + '</span>' : ''}</div></div>
       <span class="badge ${state[0]}">${state[1]}${a.map ? ' [' + esc(a.map) + ']' : ''}</span>
     </div>
