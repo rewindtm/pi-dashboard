@@ -706,10 +706,40 @@ async function loadDisks() {
     if (!res.ok) throw new Error(d.error || 'errore');
     document.getElementById('disks-setup').classList.toggle('hidden', d.helperInstalled);
     diskFormatTools = d.formatTools || {};
-    list.innerHTML = d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>';
+    list.innerHTML = (d.raids || []).map(raidCard).join('') + (d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>');
   } catch (err) {
     list.innerHTML = '<div class="card text-sm">Errore: ' + esc(err.message) + '</div>';
   }
+}
+
+function raidCard(a) {
+  const bad = a.degraded || a.members.some((m) => m.failed);
+  const state = a.sync
+    ? ['bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400', 'sincronizzazione ' + a.sync.percent.toFixed(1) + '%']
+    : bad
+      ? ['bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400', 'degradato']
+      : ['bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400', 'sano'];
+  const eta = a.sync && a.sync.finishMin != null
+    ? `<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">${esc(a.sync.action)}: ancora circa ${a.sync.finishMin >= 60 ? Math.floor(a.sync.finishMin / 60) + ' h ' + Math.round(a.sync.finishMin % 60) + ' min' : Math.round(a.sync.finishMin) + ' min'}${a.sync.speedKB ? ' · ' + (a.sync.speedKB / 1024).toFixed(0) + ' MB/s' : ''}. Non riavviare né scollegare dischi finché non è completata.</div>`
+    : '';
+  const bar = a.sync
+    ? `<div class="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${a.sync.percent.toFixed(0)}%"></div></div>`
+    : '';
+  const pct = a.used != null && a.size ? Math.min(100, (a.used / a.size) * 100) : null;
+  const usage = pct == null ? '' : `<div class="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${pct.toFixed(0)}%"></div></div>
+    <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">${fmtBytes(a.used)} usati · ${fmtBytes(a.avail)} liberi</div>`;
+  const members = a.members
+    .map((m) => `<span class="badge ${m.failed ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'}">${esc(m.name)}${m.failed ? ' (guasto)' : ''}</span>`)
+    .join(' ');
+  return `<div class="card">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div><h3 class="section-title">RAID ${esc((a.level || '').replace('raid', 'RAID '))} · ${esc(a.name)}${a.label ? ' · ' + esc(a.label) : ''}</h3>
+        <div class="text-xs text-gray-500 dark:text-gray-400">${esc(a.path)} · ${fmtBytes(a.size)} · ${esc(a.fstype || '—')}${a.mountpoint ? ' · montato su <span class="font-mono">' + esc(a.mountpoint) + '</span>' : ''}</div></div>
+      <span class="badge ${state[0]}">${state[1]}${a.map ? ' [' + esc(a.map) + ']' : ''}</span>
+    </div>
+    <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Membri: ${members}${a.total != null ? ` · ${a.working}/${a.total} attivi` : ''}</div>
+    ${bar}${eta}${usage}
+  </div>`;
 }
 
 function diskCard(disk) {
@@ -725,8 +755,8 @@ function diskCard(disk) {
         : `<div class="h-1.5 w-32 overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:${pct.toFixed(0)}%"></div></div>
            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">${fmtBytes(p.used)} usati · ${fmtBytes(p.avail)} liberi</div>`;
       const dev = jsArg(p.path);
-      const actions = disk.system
-        ? '<span class="text-xs text-gray-400">protetto</span>'
+      const actions = disk.system || p.raid
+        ? `<span class="text-xs text-gray-400">${p.raid ? 'membro RAID ' + esc(p.raid) : 'protetto'}</span>`
         : [
             p.mountpoint
               ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="diskAction('unmount', ${dev})">Smonta</button>`
@@ -739,7 +769,7 @@ function diskCard(disk) {
         <td>${esc(p.name)}<div class="text-xs text-gray-500 dark:text-gray-400">${esc(p.label || '')}</div></td>
         <td>${esc(p.fstype || '—')}</td>
         <td>${fmtBytes(p.size)}</td>
-        <td>${p.mountpoint ? `<span class="font-mono text-xs">${esc(p.mountpoint)}</span>${p.readOnly ? ' <span class="badge">sola lettura</span>' : ''}` : '<span class="text-xs text-gray-400">non montato</span>'}</td>
+        <td>${p.mountpoint ? `<span class="font-mono text-xs">${esc(p.mountpoint)}</span>${p.readOnly ? ' <span class="badge">sola lettura</span>' : ''}` : p.raid ? `<span class="text-xs text-gray-400">in uso da ${esc(p.raid)}</span>` : '<span class="text-xs text-gray-400">non montato</span>'}</td>
         <td>${usage}</td>
         <td>${actions}</td>
       </tr>`;

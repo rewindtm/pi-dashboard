@@ -53,7 +53,12 @@ async function listDisks() {
     mountable: !system && MOUNTABLE.has(p.fstype),
   });
 
-  return JSON.parse(r.stdout).blockdevices
+  const tree = JSON.parse(r.stdout).blockdevices;
+  const raids = buildRaids(tree);
+  const memberOf = {};
+  for (const a of raids) for (const m of a.members) memberOf[m.path] = a.name;
+
+  const disks = tree
     .filter((d) => d.type === 'disk' && !/^(ram|zram|loop)/.test(d.name))
     .map((d) => {
       const mps = mountpoints(d);
@@ -68,10 +73,65 @@ async function listDisks() {
         removable: !!d.rm,
         system,
         // disco senza tabella delle partizioni: il filesystem sta sul disco stesso
-        partitions: parts.length ? parts.map((p) => toPart(p, system)) : d.fstype ? [toPart(d, system)] : [],
-        canEject: !system && d.name.startsWith('sd'),
+        partitions: (parts.length ? parts.map((p) => toPart(p, system)) : d.fstype ? [toPart(d, system)] : [])
+          .map((p) => ({ ...p, raid: memberOf[p.path] || null })),
+        canEject: !system && d.name.startsWith('sd') && !(d.children || []).some((c) => memberOf[c.path]),
       };
     });
+  return { disks, raids };
+}
+
+// Array md (RAID) dall'albero di lsblk (membri e punti di mount) e da /proc/mdstat (stato, sincronizzazione).
+function buildRaids(tree) {
+  const arrays = {};
+  const walk = (node, parent) => {
+    if (/^raid/.test(node.type) || node.type === 'md') {
+      const a = (arrays[node.name] ||= {
+        name: node.name, path: node.path, level: node.type, size: Number(node.size),
+        fstype: node.fstype, label: node.label, mountpoint: node.mountpoint,
+        used: node.fsused == null ? null : Number(node.fsused),
+        avail: node.fsavail == null ? null : Number(node.fsavail),
+        members: [],
+      });
+      if (parent && !a.members.some((m) => m.path === parent.path)) {
+        a.members.push({ path: parent.path, name: parent.name, size: Number(parent.size) });
+      }
+    }
+    for (const c of node.children || []) walk(c, node);
+  };
+  for (const d of tree) walk(d, null);
+
+  let text = '';
+  try { text = fs.readFileSync('/proc/mdstat', 'utf8'); } catch { /* niente md */ }
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(md\d+)\s*:\s*(\S+)\s+(\S+)\s+(.*)$/);
+    if (!m || !arrays[m[1]]) continue;
+    const a = arrays[m[1]];
+    a.active = m[2] === 'active';
+    const failed = new Set();
+    for (const dev of m[4].split(/\s+/)) {
+      const d = dev.match(/^([a-z0-9]+)\[\d+\](\(F\))?/);
+      if (d && d[2]) failed.add(d[1]);
+    }
+    a.members.forEach((mb) => { mb.failed = failed.has(mb.name); });
+    const st = (lines[i + 1] || '').match(/\[(\d+)\/(\d+)\]\s*\[([U_]+)\]/);
+    if (st) { a.total = Number(st[1]); a.working = Number(st[2]); a.map = st[3]; }
+    for (let j = i + 1; j < i + 4 && lines[j] && !/^md\d+/.test(lines[j]); j++) {
+      const s = lines[j].match(/(resync|recovery|reshape|check)\s*=\s*([\d.]+)%/);
+      if (s) {
+        const fin = lines[j].match(/finish=([\d.]+)min/);
+        const spd = lines[j].match(/speed=(\d+)K\/sec/);
+        a.sync = {
+          action: s[1], percent: Number(s[2]),
+          finishMin: fin ? Number(fin[1]) : null,
+          speedKB: spd ? Number(spd[1]) : null,
+        };
+      }
+    }
+    a.degraded = a.total != null && a.working < a.total;
+  }
+  return Object.values(arrays);
 }
 
 const DISK = /^\/dev\/(sd[a-z]+|nvme[0-9]+n[0-9]+)$/;
@@ -86,7 +146,8 @@ router.get('/', async (req, res) => {
   try {
     const helperInstalled = fs.existsSync(HELPER);
     const formatTools = Object.fromEntries(Object.entries(FORMAT_TOOLS).map(([fsType, bin]) => [fsType, hasTool(bin)]));
-    res.json({ disks: await listDisks(), helperInstalled, formatTools });
+    const { disks, raids } = await listDisks();
+    res.json({ disks, raids, helperInstalled, formatTools });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -131,12 +192,13 @@ router.post('/format', async (req, res) => {
 
   let disks;
   try {
-    disks = await listDisks();
+    disks = (await listDisks()).disks;
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
   const disk = disks.find((d) => d.path === device);
   if (!disk) return res.status(404).json({ error: 'disco non trovato' });
+  if (disk.partitions.some((p) => p.raid || p.fstype === 'linux_raid_member')) return res.status(403).json({ error: 'disco membro di un RAID: non formattabile da qui' });
   if (disk.system) return res.status(403).json({ error: 'disco di sistema: non formattabile' });
   if (disk.partitions.some((p) => p.mountpoint)) return res.status(409).json({ error: 'smonta prima tutte le partizioni del disco' });
 
