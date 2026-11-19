@@ -75,6 +75,7 @@ document.querySelectorAll('#sidebar .side-link').forEach((btn) => {
     document.querySelectorAll('#sidebar .side-link').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
     btn.classList.add('active');
+    document.getElementById('hostname').textContent = btn.textContent.trim();
     document.getElementById(btn.dataset.view).classList.remove('hidden');
     toggleSidebar(false);
     if (btn.dataset.view === 'system-view') loadSystem();
@@ -147,15 +148,21 @@ const STAT_ICONS = {
   disk: { bg: 'bg-indigo-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />' },
 };
 
-function statCard(key, label, value) {
+function statCard(key, label, value, sub) {
   const icon = STAT_ICONS[key] || STAT_ICONS.os;
-  return `<div class="stat-card">
-    <span class="stat-icon ${icon.bg}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-6 w-6">${icon.svg}</svg></span>
+  return `<div class="stat-card !gap-4 !p-5">
+    <span class="stat-icon ${icon.bg} !h-11 !w-11 !rounded-[9px]"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-6 w-6">${icon.svg}</svg></span>
     <div class="min-w-0">
-      <h3 class="section-title">${label}</h3>
-      <div class="truncate text-lg font-semibold text-gray-800 dark:text-gray-100">${value}</div>
+      <div class="text-sm text-gray-500 dark:text-gray-400">${label}</div>
+      <div class="truncate text-2xl font-bold leading-tight text-gray-800 dark:text-gray-100">${value}</div>
+      ${sub ? `<div class="truncate text-xs text-gray-500 dark:text-gray-400">${sub}</div>` : ''}
     </div>
   </div>`;
+}
+
+function fmtUptime(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return d ? d + ' g ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min';
 }
 
 async function loadSystem() {
@@ -163,20 +170,23 @@ async function loadSystem() {
     const res = await fetch('/api/system/stats', { headers: authHeaders() });
     if (!res.ok) throw new Error('errore ' + res.status);
     const d = await res.json();
-    document.getElementById('hostname').textContent = 'Pi Dashboard — ' + (d.os.hostname || '');
-    const temp = d.cpuTemp && d.cpuTemp.main ? d.cpuTemp.main.toFixed(1) + ' °C' : 'n/d';
-    const uptimeH = (d.uptime / 3600).toFixed(1) + ' h';
+    document.getElementById('sidebar-host').textContent = d.os.hostname || '';
+    const temp = d.cpuTemp && d.cpuTemp.main ? d.cpuTemp.main.toFixed(1).replace('.', ',') + ' °C' : 'n/d';
     const ramPct = d.mem.total ? (d.mem.used / d.mem.total) * 100 : 0;
-    const cards = [
-      statCard('cpu', 'CPU', d.cpu.brand + ' (' + d.cpu.cores + ' core)'),
-      statCard('load', 'Carico CPU', d.load.currentLoad.toFixed(1) + ' %'),
+    document.getElementById('system-subtitle').textContent =
+      d.cpu.brand + ' · ' + d.os.distro + ' (' + d.os.arch + ') · Attivo da ' + fmtUptime(d.uptime);
+    document.getElementById('system-cards').innerHTML = [
+      statCard('load', 'Carico CPU · ' + d.cpu.cores + ' core', d.load.currentLoad.toFixed(0) + '%'),
+      statCard('ram', 'RAM utilizzata', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total), ramPct.toFixed(0) + '% in uso'),
       statCard('temp', 'Temperatura', temp),
-      statCard('ram', 'RAM', fmtBytes(d.mem.used) + ' / ' + fmtBytes(d.mem.total)),
-      statCard('uptime', 'Uptime', uptimeH),
-      statCard('os', 'OS', d.os.distro + ' (' + d.os.arch + ')'),
-    ];
-    d.fs.slice(0, 3).forEach((f) => cards.push(statCard('disk', 'Disco ' + f.mount, fmtBytes(f.used) + ' / ' + fmtBytes(f.size) + ' (' + f.use + '%)')));
-    document.getElementById('system-cards').innerHTML = cards.join('');
+    ].join('');
+    document.getElementById('system-fs').innerHTML = d.fs
+      .filter((f) => f.size > 0)
+      .map((f) => '<tr><td>' + esc(f.fs || f.mount) + '</td><td><span class="font-mono text-xs">' + esc(f.mount) + '</span></td>'
+        + '<td>' + fmtBytes(f.used) + ' / ' + fmtBytes(f.size) + '</td>'
+        + '<td><div class="flex items-center gap-3"><span class="w-12 text-right">' + Number(f.use).toFixed(1).replace('.', ',') + '%</span>'
+        + '<div class="h-1.5 w-24 overflow-hidden rounded bg-gray-200 dark:bg-white/10"><div class="h-full bg-accent" style="width:' + Math.min(100, f.use) + '%"></div></div></div></td></tr>')
+      .join('') || '<tr><td colspan="4" class="text-gray-500">Nessun filesystem</td></tr>';
     pushHistoryPoint(d.load.currentLoad, ramPct);
   } catch (err) {
     document.getElementById('system-cards').innerHTML = '<div class="card">Errore: ' + esc(err.message) + '</div>';
@@ -738,8 +748,45 @@ async function loadDisks() {
     list.innerHTML = (raids.length ? '<h2 class="font-display text-2xl font-bold">Volumi RAID</h2><div class="grid gap-4 lg:grid-cols-2">' + raids.map(raidCard).join('') + '</div>' : '')
       + '<h2 class="mt-2 font-display text-2xl font-bold">Dischi fisici</h2>'
       + (d.disks.map(diskCard).join('') || '<div class="card text-sm">Nessun disco trovato</div>');
+    d.disks.filter((x) => /^(sd|nvme)/.test(x.name)).forEach((x) => loadSmart(x));
   } catch (err) {
     list.innerHTML = '<div class="card text-sm">Errore: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function loadSmart(disk, fresh) {
+  const box = document.getElementById('smart-' + disk.name);
+  const badge = document.getElementById('smartbadge-' + disk.name);
+  if (!box) return;
+  box.classList.remove('hidden');
+  if (!box.innerHTML) box.innerHTML = '<span class="text-xs text-gray-400">SMART: lettura in corso…</span>';
+  try {
+    const res = await fetch('/api/disks/smart?device=' + encodeURIComponent(disk.path) + (fresh ? '&fresh=1' : ''), { headers: authHeaders() });
+    const s = await res.json();
+    if (!res.ok) throw new Error(s.error || 'errore');
+    const V = {
+      ok: ['Salute OK', 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'],
+      warn: ["Da tenere d'occhio", 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'],
+      bad: ['Disco a rischio', 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400'],
+    }[s.verdict];
+    if (badge) badge.innerHTML = '<span class="badge ' + V[1] + '">SMART ' + (s.verdict === 'ok' ? 'ok' : s.verdict === 'warn' ? 'attenzione' : 'rischio') + '</span>';
+    const item = (label, value, flag) => (value == null ? '' : '<div><div class="text-xs text-gray-500 dark:text-gray-400">' + label + '</div><div class="font-semibold ' + (flag ? 'text-amber-500' : '') + '">' + value + '</div></div>');
+    const bad = s.uncorrectable ?? s.mediaErrors;
+    box.innerHTML = '<div class="flex flex-wrap items-center gap-x-6 gap-y-2">'
+      + '<span class="badge ' + V[1] + '">' + V[0] + '</span>'
+      + item('Autovalutazione', s.passed == null ? null : s.passed ? 'PASSED' : 'FAILED', s.passed === false)
+      + item('Vita residua', s.lifeLeft == null ? null : s.lifeLeft + '%', s.lifeLeft != null && s.lifeLeft < 30)
+      + item('Temperatura', s.temp == null ? null : s.temp + ' °C', s.temp >= 60)
+      + item('Ore accesi', s.hours == null ? null : s.hours.toLocaleString('it-IT') + ' h')
+      + item('Settori riallocati', s.reallocated, s.reallocated > 0)
+      + item('In attesa', s.pending, s.pending > 0)
+      + item('Non correggibili', bad, bad > 0)
+      + item('Errori CRC', s.crc, s.crc > 0)
+      + '<button class="btn-secondary !px-2 !py-1 text-xs" onclick="loadSmart({ name: ' + jsArg(disk.name) + ', path: ' + jsArg(disk.path) + ' }, true)">Rileggi</button>'
+      + '</div>';
+  } catch (err) {
+    if (badge) badge.innerHTML = '';
+    box.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">SMART non disponibile: ' + esc(err.message) + '</span>';
   }
 }
 
@@ -866,12 +913,13 @@ function diskCard(disk) {
       <span class="min-w-0 flex-1 truncate font-display text-lg font-bold">${esc(disk.model || (disk.name.startsWith('mmc') ? 'microSD' : disk.name))}</span>
       <span class="hidden font-mono text-sm text-gray-500 dark:text-gray-400 sm:inline">${esc(disk.path)}</span>
       <span class="hidden text-sm text-gray-500 dark:text-gray-400 sm:inline">${fmtBytes(disk.size)}</span>
-      <span class="flex items-center gap-1.5">${tags}</span>
+      <span class="flex items-center gap-1.5">${tags}<span id="smartbadge-${esc(disk.name)}"></span></span>
       ${chevron}
     </summary>
     <div class="border-t border-gray-200 dark:border-white/10">
       <div class="flex justify-end gap-2 p-3 pb-0 empty:hidden">${format} ${eject}</div>
       ${formatPanel}
+      <div id="smart-${esc(disk.name)}" class="hidden border-b border-gray-200 px-4 py-3 text-sm dark:border-white/10"></div>
       <div class="overflow-x-auto">
         <table class="table-base">
           <thead><tr><th>Partizione</th><th>Filesystem</th><th>Dimensione</th><th>Montato su</th><th>Spazio</th><th>Azioni</th></tr></thead>

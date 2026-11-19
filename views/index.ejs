@@ -48,7 +48,7 @@
   }
   @layer components {
     .btn {
-      @apply inline-flex items-center gap-1.5 rounded-md border border-transparent bg-accent px-3.5 py-1.5 font-display text-[0.95rem] font-semibold uppercase tracking-wider text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
+      @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-accent px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
     }
     .section-title {
       @apply text-base font-semibold tracking-tight text-gray-800 dark:text-gray-100;
@@ -125,7 +125,7 @@
       <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M15.75 3v1.5M3 8.25h1.5M3 15.75h1.5M19.5 8.25H21M19.5 15.75H21M8.25 19.5V21M15.75 19.5V21M6.75 6.75h10.5v10.5H6.75V6.75Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h4.5v4.5h-4.5v-4.5Z" /></svg>
       </span>
-      <span class="font-display text-xl font-semibold uppercase tracking-wider">Pi Dashboard</span>
+      <span class="text-lg font-bold tracking-tight">Pi Dashboard</span>
     </div>
     <nav class="flex-1 space-y-1 overflow-y-auto px-2 py-2">
       <button class="side-link active" data-view="system-view">
@@ -173,7 +173,7 @@
         File
       </button>
     </nav>
-    <div class="border-t border-white/10 p-3 text-xs text-gray-500">Pi Dashboard</div>
+    <div class="border-t border-white/10 p-3 text-xs text-gray-500">Pi Dashboard · <span id="sidebar-host" class="font-mono"></span></div>
   </aside>
 
   <div class="flex h-screen min-w-0 flex-1 flex-col">
@@ -181,7 +181,7 @@
       <button class="icon-btn lg:hidden" onclick="toggleSidebar(true)" aria-label="Apri menu">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" /></svg>
       </button>
-      <h1 id="hostname" class="flex-1 truncate font-display text-lg font-semibold tracking-tight text-gray-700 dark:text-gray-200">Pi Dashboard</h1>
+      <h1 id="hostname" class="flex-1 truncate text-lg font-semibold tracking-tight text-gray-800 dark:text-gray-100">Home</h1>
       <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" aria-label="Cambia tema">
         <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-6.364-.386 1.591-1.591M3 12h2.25m.386-6.364 1.591 1.591M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         <svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
@@ -199,14 +199,26 @@
       </div>
 
       <div id="system-view" class="view space-y-4">
+        <div>
+          <h1 class="font-display text-3xl font-bold tracking-tight">Panoramica</h1>
+          <p id="system-subtitle" class="mt-1 text-sm text-gray-500 dark:text-gray-400"></p>
+        </div>
         <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
         <div class="card">
-          <h3 class="mb-2 section-title">Carico CPU e RAM (tempo reale)</h3>
+          <h3 class="mb-2 section-title">CPU e RAM</h3>
           <canvas id="history-chart" class="h-48 w-full"></canvas>
           <div class="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
             <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-accent"></span> CPU</span>
             <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-blue-500"></span> RAM</span>
+            <span>· percentuale di utilizzo, tempo reale</span>
           </div>
+        </div>
+        <div class="card">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <h3 class="section-title">Filesystem montati</h3>
+            <button class="text-sm text-accent hover:underline" onclick="document.querySelector('[data-view=disks-view]').click()">Apri Dischi ↗</button>
+          </div>
+          <div class="overflow-x-auto"><table class="table-base"><thead><tr><th>Volume</th><th>Montato su</th><th>Utilizzo</th><th>Occupazione</th></tr></thead><tbody id="system-fs"></tbody></table></div>
         </div>
       </div>
 

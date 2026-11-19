@@ -8,6 +8,7 @@
 #      pi-disk mount|unmount|automount-on|automount-off <partizione>
 #      pi-disk eject <disco o partizione>
 #      pi-disk format <disco intero> <ext4|exfat|ntfs> [etichetta]
+#      pi-disk smart <disco intero>      (sola lettura, anche sui dischi di sistema)
 set -euo pipefail
 
 BASE=/mnt/disks
@@ -21,6 +22,17 @@ action=${1:-}
 dev=${2:-}
 
 if [ "$action" = check ]; then echo ok; exit 0; fi
+
+# SMART: solo lettura, valido anche per i dischi di sistema (membri RAID compresi).
+if [ "$action" = smart ]; then
+  [[ $dev =~ ^/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] || die "indica un disco intero"
+  [ -b "$dev" ] || die "dispositivo non trovato"
+  command -v smartctl >/dev/null || die "manca smartctl: installa con 'sudo apt install smartmontools'"
+  if [[ $dev == /dev/nvme* ]]; then dopt=(); else dopt=(-d sat); fi
+  # smartctl usa il codice di uscita come maschera di bit (anche per i dischi sani): l'importante è il JSON
+  smartctl -j -a "${dopt[@]}" "$dev" || true
+  exit 0
+fi
 
 [[ $dev =~ ^/dev/(sd[a-z]+[0-9]*|nvme[0-9]+n[0-9]+(p[0-9]+)?)$ ]] || die "dispositivo non valido"
 [ -b "$dev" ] || die "dispositivo non trovato"

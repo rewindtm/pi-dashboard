@@ -142,6 +142,62 @@ function hasTool(bin) {
   return ['/usr/sbin/', '/sbin/', '/usr/bin/'].some((d) => fs.existsSync(d + bin));
 }
 
+// --- SMART (sola lettura, tramite l'helper privilegiato; cache di 5 minuti per disco) ---
+const SMART_DISK = /^\/dev\/(sd[a-z]+|nvme[0-9]+n[0-9]+)$/;
+const smartCache = new Map();
+
+function summarizeSmart(j) {
+  const attrs = {};
+  for (const a of (j.ata_smart_attributes && j.ata_smart_attributes.table) || []) attrs[a.id] = a;
+  const raw = (id) => (attrs[id] ? Number(attrs[id].raw.value) : null);
+  const nvme = j.nvme_smart_health_information_log;
+  let lifeLeft = null;
+  if (nvme && nvme.percentage_used != null) lifeLeft = Math.max(0, 100 - nvme.percentage_used);
+  else {
+    const life = [177, 202, 231, 233, 169].filter((id) => attrs[id]).map((id) => attrs[id].value);
+    if (life.length) lifeLeft = Math.min(...life);
+  }
+  const out = {
+    model: j.model_name || null,
+    passed: j.smart_status ? !!j.smart_status.passed : null,
+    temp: (j.temperature && j.temperature.current) ?? (nvme && nvme.temperature) ?? null,
+    hours: (j.power_on_time && j.power_on_time.hours) ?? (nvme && nvme.power_on_hours) ?? null,
+    lifeLeft,
+    reallocated: raw(5),
+    pending: raw(197),
+    uncorrectable: raw(198) ?? raw(187),
+    crc: raw(199),
+    mediaErrors: nvme ? nvme.media_errors : null,
+    spare: nvme ? nvme.available_spare : null,
+  };
+  const bad = out.passed === false || out.pending > 0 || out.uncorrectable > 0 || out.mediaErrors > 0 || (out.lifeLeft != null && out.lifeLeft < 10);
+  const warn = out.reallocated > 0 || out.crc > 0 || (out.temp != null && out.temp >= 60) || (out.lifeLeft != null && out.lifeLeft < 30);
+  out.verdict = bad ? 'bad' : warn ? 'warn' : 'ok';
+  return out;
+}
+
+router.get('/smart', async (req, res) => {
+  const device = String(req.query.device || '');
+  if (!SMART_DISK.test(device)) return res.status(400).json({ error: 'dispositivo non valido' });
+  const hit = smartCache.get(device);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000 && !req.query.fresh) return res.json(hit.data);
+  const r = await run('sudo', ['-n', HELPER, 'smart', device], 60000);
+  if (!r.ok && /password is required|not allowed|a terminal is required/.test(r.stderr)) {
+    return res.status(412).json({ error: 'SMART non abilitato: esegui sul Pi "sudo bash ~/pi-dashboard/scripts/setup-disks.sh"' });
+  }
+  if (!r.ok && /manca smartctl/.test(r.stderr)) return res.status(412).json({ error: 'smartctl non installato: esegui "sudo apt install smartmontools"' });
+  if (!r.ok && /azione non valida|dispositivo non valido/.test(r.stderr)) {
+    return res.status(412).json({ error: 'helper non aggiornato: esegui sul Pi "sudo bash ~/pi-dashboard/scripts/setup-disks.sh"' });
+  }
+  try {
+    const data = summarizeSmart(JSON.parse(r.stdout));
+    smartCache.set(device, { at: Date.now(), data });
+    res.json(data);
+  } catch {
+    res.status(500).json({ error: 'risposta SMART non leggibile' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const helperInstalled = fs.existsSync(HELPER);

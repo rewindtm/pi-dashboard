@@ -11,6 +11,7 @@ USER_NAME=${SUDO_USER:-rewi}
 DIR=$(cd "$(dirname "$0")" && pwd)
 
 install -o root -g root -m 755 "$DIR/pi-disk.sh" /usr/local/bin/pi-disk
+command -v smartctl >/dev/null || apt-get install -y smartmontools
 mkdir -p /mnt/disks
 
 tmp=$(mktemp)
