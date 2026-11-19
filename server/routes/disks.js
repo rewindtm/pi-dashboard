@@ -186,7 +186,7 @@ router.get('/smart', async (req, res) => {
     return res.status(412).json({ error: 'SMART non abilitato: esegui sul Pi "sudo bash ~/pi-dashboard/scripts/setup-disks.sh"' });
   }
   if (!r.ok && /manca smartctl/.test(r.stderr)) return res.status(412).json({ error: 'smartctl non installato: esegui "sudo apt install smartmontools"' });
-  if (!r.ok && /azione non valida|dispositivo non valido/.test(r.stderr)) {
+  if (!r.ok && /azione non valida|dispositivo non valido|disco di sistema/.test(r.stderr)) {
     return res.status(412).json({ error: 'helper non aggiornato: esegui sul Pi "sudo bash ~/pi-dashboard/scripts/setup-disks.sh"' });
   }
   try {
