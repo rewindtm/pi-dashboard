@@ -209,6 +209,13 @@
           <p id="system-subtitle" class="mt-1 text-sm text-gray-500 dark:text-gray-400"></p>
         </div>
         <div id="system-cards" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+        <div id="pihole-card" class="card hidden">
+          <div class="panel-head">
+            <div class="flex items-center gap-2"><h2 class="font-display text-xl font-bold">Pi-hole</h2><span id="pihole-badge" class="badge"></span></div>
+            <a id="pihole-link" class="text-sm text-accent hover:underline" href="#" target="_blank" rel="noopener">Apri Pi-hole ↗</a>
+          </div>
+          <div id="pihole-body"></div>
+        </div>
         <div class="card">
           <h3 class="mb-2 section-title">CPU e RAM</h3>
           <canvas id="history-chart" class="h-48 w-full"></canvas>

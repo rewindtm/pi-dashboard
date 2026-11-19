@@ -160,12 +160,48 @@ function statCard(key, label, value, sub) {
   </div>`;
 }
 
+async function loadPihole() {
+  const card = document.getElementById('pihole-card');
+  if (!card) return;
+  try {
+    const res = await fetch('/api/pihole', { headers: authHeaders() });
+    if (!res.ok) { card.classList.add('hidden'); return; }
+    const d = await res.json();
+    const n = (v) => Number(v).toLocaleString('it-IT');
+    const pct = Number(d.percentBlocked).toFixed(1).replace('.', ',');
+    const on = d.blocking === 'enabled';
+    const badge = document.getElementById('pihole-badge');
+    badge.className = 'badge ' + (on ? 'badge-ok' : 'badge-warn');
+    badge.textContent = on ? 'Blocco attivo' : 'Blocco disattivato';
+    document.getElementById('pihole-link').href = location.protocol + '//' + location.hostname + ':8081/admin';
+    const tile = (label, value, sub) => `<div class="rounded-lg border border-border-light p-3 dark:border-border-dark">
+      <div class="text-xs text-gray-500 dark:text-gray-400">${label}</div>
+      <div class="font-display text-2xl font-bold leading-tight">${value}</div>
+      ${sub ? `<div class="text-xs text-gray-500 dark:text-gray-400">${sub}</div>` : ''}</div>`;
+    const top = d.topBlocked.length
+      ? d.topBlocked.map((t) => `<div class="flex items-center justify-between gap-3 text-sm"><span class="truncate font-mono text-xs">${esc(t.domain)}</span><span class="shrink-0 text-gray-500 dark:text-gray-400">${n(t.count)}</span></div>`).join('')
+      : '<div class="text-sm text-gray-500 dark:text-gray-400">Nessun dominio bloccato finora</div>';
+    document.getElementById('pihole-body').innerHTML = `
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        ${tile('Richieste (24 h)', n(d.total), n(d.clients) + ' client attivi')}
+        ${tile('Bloccate', n(d.blocked), pct + '% del totale')}
+        ${tile('Domini nelle liste', n(d.domainsOnLists), 'blocklist attive')}
+        ${tile('Dal cache', n(d.cached), n(d.forwarded) + ' inoltrate')}
+      </div>
+      <div class="mt-4"><div class="mb-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">Domini più bloccati</div><div class="space-y-1">${top}</div></div>`;
+    card.classList.remove('hidden');
+  } catch {
+    card.classList.add('hidden');
+  }
+}
+
 function fmtUptime(sec) {
   const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
   return d ? d + ' g ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min';
 }
 
 async function loadSystem() {
+  loadPihole();
   try {
     const res = await fetch('/api/system/stats', { headers: authHeaders() });
     if (!res.ok) throw new Error('errore ' + res.status);
