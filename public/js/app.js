@@ -97,6 +97,8 @@ function initApp() {
   initialized = true;
   initTerminal();
   loadSystem();
+  checkRaid();
+  setInterval(checkRaid, 60000);
   setInterval(() => {
     if (!document.getElementById('system-view').classList.contains('hidden')) loadSystem();
     if (!document.getElementById('docker-view').classList.contains('hidden')) {
@@ -687,6 +689,32 @@ async function appDockerLogs(project) {
   } catch (err) {
     notyf.error(err.message);
   }
+}
+
+// --- Avviso RAID: banner in alto se un array è degradato o in ricostruzione ---
+async function checkRaid() {
+  const el = document.getElementById('raid-banner');
+  try {
+    const res = await fetch('/api/disks', { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error('non disponibile');
+    const bad = (d.raids || []).filter((r) => r.degraded || r.members.some((m) => m.failed));
+    const syncing = bad.filter((r) => r.sync);
+    const broken = bad.filter((r) => !r.sync);
+    const cls = 'items-center gap-3 border-b px-4 py-2 text-sm ';
+    if (broken.length) {
+      el.className = 'flex ' + cls + 'border-red-500/40 bg-red-500/10 text-red-400';
+      el.innerHTML = '<b>RAID degradato:</b> ' + broken.map((r) => esc(r.label || r.name) + ' (' + r.working + '/' + r.total + ' membri)').join(', ')
+        + ' — un disco non risponde. <button class="underline" onclick="document.querySelector(\'[data-view=disks-view]\').click()">Apri Dischi</button>';
+    } else if (syncing.length) {
+      el.className = 'flex ' + cls + 'border-amber-500/40 bg-amber-500/10 text-amber-400';
+      el.innerHTML = '<b>Ricostruzione RAID in corso:</b> ' + syncing.map((r) => esc(r.label || r.name) + ' ' + r.sync.percent.toFixed(1) + '%').join(', ')
+        + ' — non riavviare né scollegare dischi.';
+    } else {
+      el.className = 'hidden ' + cls;
+      el.innerHTML = '';
+    }
+  } catch { /* offline o non autenticato: nessun avviso */ }
 }
 
 // --- Dischi ---
