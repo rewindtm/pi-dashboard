@@ -27,10 +27,15 @@ if (!process.env.DASHBOARD_TOKEN) {
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// no-cache: il browser (e Cloudflare) rivalidano sempre, così gli aggiornamenti si vedono subito
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+}));
 
 app.get('/', (req, res) => {
-  res.render('index');
+  const ver = Math.floor(require('fs').statSync(path.join(__dirname, '..', 'public', 'js', 'app.js')).mtimeMs);
+  res.setHeader('Cache-Control', 'no-store');
+  res.render('index', { ver });
 });
 
 app.get('/api/login', loginHandler);
