@@ -173,7 +173,9 @@ async function loadPihole() {
     const badge = document.getElementById('pihole-badge');
     badge.className = 'badge ' + (on ? 'badge-ok' : 'badge-warn');
     badge.textContent = on ? 'Blocco attivo' : 'Blocco disattivato';
-    document.getElementById('pihole-link').href = location.protocol + '//' + location.hostname + ':8081/admin';
+    // Dietro il tunnel Cloudflare la porta 8081 non è raggiungibile: si usa l'IP Tailscale del Pi.
+    const isIp = /^[\d.]+$/.test(location.hostname) || location.hostname === 'localhost';
+    document.getElementById('pihole-link').href = 'http://' + (isIp ? location.hostname : (d.adminHost || location.hostname)) + ':8081/admin';
     const tile = (label, value, sub) => `<div class="rounded-lg border border-border-light p-3 dark:border-border-dark">
       <div class="text-xs text-gray-500 dark:text-gray-400">${label}</div>
       <div class="font-display text-2xl font-bold leading-tight">${value}</div>

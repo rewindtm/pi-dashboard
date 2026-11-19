@@ -51,7 +51,9 @@ router.get('/', async (req, res) => {
     ]);
     const s = (sum.json || {});
     const q = s.queries || {};
+    const ts = ((os.networkInterfaces().tailscale0 || []).find((i) => i.family === 'IPv4') || {}).address;
     const data = {
+      adminHost: ts || null,
       blocking: blk.json ? blk.json.blocking : null,
       total: q.total ?? 0,
       blocked: q.blocked ?? 0,
