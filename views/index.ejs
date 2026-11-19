@@ -91,11 +91,16 @@
       @apply border-b border-border-light px-2 py-1.5 text-left text-xs font-medium text-gray-500 dark:border-border-dark dark:text-gray-400;
     }
     .table-base td {
-      @apply border-b border-border-light px-2 py-1.5 dark:border-border-dark;
+      @apply border-b border-border-light px-2 py-2.5 dark:border-border-dark;
     }
     .badge {
-      @apply inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300;
+      @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300;
     }
+    .badge-ok { @apply bg-green-100 text-green-700 dark:bg-[#163b30] dark:text-[#86efbf]; }
+    .badge-alert { @apply bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300; }
+    .badge-warn { @apply bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300; }
+    .panel-head { @apply mb-3 flex flex-wrap items-center justify-between gap-2; }
+    .big-value { @apply font-display text-3xl font-bold leading-tight; }
     details[open] > summary .chev { transform: rotate(180deg); }
     .icon-btn {
       @apply flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5;
@@ -307,50 +312,60 @@
       </div>
 
       <div id="wifi-view" class="view hidden space-y-4">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">WiFi</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Stato della connessione e reti disponibili.</p></div>
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Connessione WiFi</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Stato dell'interfaccia e reti disponibili.</p></div>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="card">
+            <div id="wifi-status">Caricamento...</div>
+          </div>
+          <div class="card space-y-3">
+            <h2 class="font-display text-xl font-bold">Connessione manuale</h2>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <input id="wifi-connect-ssid" class="input" placeholder="SSID" />
+              <input id="wifi-connect-password" type="password" class="input" placeholder="Password (se richiesta)" />
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button class="btn" onclick="connectWifi()">Connetti</button>
+              <div id="wifi-connect-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
+            </div>
+          </div>
+        </div>
         <div class="card">
-          <h3 class="mb-2 section-title">Stato</h3>
-          <div id="wifi-status" class="text-sm">Caricamento...</div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button class="btn-secondary" onclick="loadWifi()">Aggiorna scansione</button>
-          <button class="btn-danger" onclick="fetch('/api/wifi/disconnect',{method:'POST',headers:authHeaders()}).then(loadWifi)">Disconnetti</button>
-        </div>
-        <div class="card overflow-x-auto !p-0">
+          <div class="panel-head">
+            <h2 class="font-display text-xl font-bold">Reti disponibili</h2>
+            <button class="btn-secondary" onclick="loadWifi()">Aggiorna scansione</button>
+          </div>
+          <div class="overflow-x-auto">
           <table id="wifi-table" class="table-base">
-            <thead><tr><th>SSID</th><th>Segnale</th><th>Sicurezza</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>SSID</th><th>Segnale</th><th>Sicurezza</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
-        </div>
-        <div class="card space-y-2">
-          <h3 class=" section-title">Connetti</h3>
-          <div class="flex flex-wrap gap-2">
-            <input id="wifi-connect-ssid" class="input max-w-xs" placeholder="SSID" />
-            <input id="wifi-connect-password" type="password" class="input max-w-xs" placeholder="Password (se richiesta)" />
-            <button class="btn" onclick="connectWifi()">Connetti</button>
           </div>
-          <div id="wifi-connect-out" class="text-sm text-gray-500 dark:text-gray-400"></div>
         </div>
       </div>
 
       <div id="updates-view" class="view hidden space-y-4">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Aggiornamenti</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pacchetti di sistema con una nuova versione disponibile.</p></div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button class="btn-secondary" onclick="checkUpdates()">Controlla aggiornamenti</button>
-          <button id="upgrade-btn" class="btn hidden" onclick="upgradeAll()">Aggiorna tutto (apt upgrade)</button>
-        </div>
-        <div id="updates-summary" class="card text-sm text-gray-600 dark:text-gray-300">Premi "Controlla aggiornamenti" per verificare i pacchetti disponibili.</div>
-        <div class="card overflow-x-auto !p-0">
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Aggiornamenti di sistema</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pacchetti APT · aggiornamenti disponibili per il sistema.</p></div>
+        <div class="card">
+          <div class="panel-head">
+            <h2 id="updates-summary" class="font-display text-xl font-bold">Premi "Controlla" per cercare aggiornamenti</h2>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-secondary" onclick="checkUpdates()">Controlla</button>
+              <button id="upgrade-btn" class="btn hidden" onclick="upgradeAll()">Aggiorna tutto</button>
+            </div>
+          </div>
+          <input id="updates-filter" data-filter="updates-table" type="search" class="input mb-3 max-w-md" placeholder="Filtra pacchetti" />
+          <div class="overflow-x-auto">
           <table id="updates-table" class="table-base">
-            <thead><tr><th>Pacchetto</th><th>Versione attuale</th><th>Nuova versione</th><th>Repo</th></tr></thead>
+            <thead><tr><th>Pacchetto</th><th>Versione attuale</th><th>Nuova versione</th><th>Repository</th></tr></thead>
             <tbody></tbody>
           </table>
+          </div>
         </div>
         <pre id="updates-out" class="whitespace-pre-wrap rounded-lg bg-black p-3 font-mono text-xs text-gray-100"></pre>
       </div>
 
       <div id="github-view" class="view hidden space-y-4">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">GitHub</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Le tue repository e le app installate sul Pi.</p></div>
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Repository GitHub</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Le tue repository e le app installate sul Pi.</p></div>
         <div id="github-connect" class="card space-y-2">
           <h3 class=" section-title">Connessione GitHub</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -376,36 +391,40 @@
           </div>
 
           <div>
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-              <h3 class=" section-title">Le tue repository</h3>
-              <input id="repos-filter" class="input max-w-xs" placeholder="Filtra per nome..." oninput="renderRepos()" />
-              <button class="btn-secondary" onclick="refreshReposInBackground()">Aggiorna</button>
-              <span id="repos-refresh-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
-            </div>
-            <div class="card overflow-x-auto !p-0">
+            <div class="card">
+              <div class="panel-head">
+                <h2 class="font-display text-xl font-bold">Le tue repository</h2>
+                <div class="flex items-center gap-2">
+                  <span id="repos-refresh-status" class="text-xs text-gray-500 dark:text-gray-400"></span>
+                  <button class="btn-secondary" onclick="refreshReposInBackground()">Aggiorna</button>
+                </div>
+              </div>
+              <input id="repos-filter" class="input mb-3 max-w-md" type="search" placeholder="Filtra repository" oninput="renderRepos()" />
+              <div class="overflow-x-auto">
               <table id="repos-table" class="table-base">
-                <thead><tr><th>Repo</th><th>Aggiornata</th><th>Visibilità</th><th>Stato</th><th>Azioni</th></tr></thead>
+                <thead><tr><th>Repository</th><th>Aggiornata</th><th>Visibilità</th><th>Stato</th><th></th></tr></thead>
                 <tbody></tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div id="tunnel-view" class="view hidden space-y-4">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Tunnel</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Cloudflare Tunnel: hostname pubblici verso i servizi locali.</p></div>
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Tunnel Cloudflare</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Cloudflare Tunnel: hostname pubblici verso i servizi locali.</p></div>
         <div class="card flex flex-wrap items-center gap-3">
-          <span id="tunnel-status-dot" class="h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400"></span>
-          <span id="tunnel-status-text" class="text-sm text-gray-600 dark:text-gray-300">Caricamento stato...</span>
+          <span id="tunnel-status-dot" class="hidden"></span>
+          <span id="tunnel-status-text" class="badge">Caricamento stato...</span>
           <div class="ml-auto flex gap-2">
-            <button class="btn-secondary !px-3 !py-1.5 text-sm" onclick="loadTunnel()">Aggiorna</button>
-            <button class="btn-secondary !px-3 !py-1.5 text-sm" onclick="restartTunnel()">Riavvia tunnel</button>
+            <button class="btn-secondary" onclick="loadTunnel()">Aggiorna</button>
+            <button class="btn-secondary" onclick="restartTunnel()">Riavvia tunnel</button>
           </div>
         </div>
 
         <div class="card space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class=" section-title">Regole ingress</h3>
+            <h2 class="font-display text-xl font-bold">Regole ingress</h2>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="addTunnelRuleRow()">+ Aggiungi regola</button>
           </div>
           <p class="text-sm text-gray-500 dark:text-gray-400">Ogni regola instrada un hostname pubblico verso un servizio locale del Pi (es. <code>http://localhost:7890</code>). Salvando, la configurazione viene scritta e il tunnel riavviato.</p>
@@ -420,7 +439,7 @@
       </div>
 
       <div id="db-view" class="view hidden space-y-4">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Database</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">PostgreSQL: database, accesso remoto e connection string.</p></div>
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Database PostgreSQL</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">PostgreSQL: database, accesso remoto e connection string.</p></div>
         <div id="db-not-installed" class="hidden card space-y-2">
           <h3 class=" section-title">PostgreSQL non è installato</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">Installa PostgreSQL sul Pi per poter creare database per le tue app.</p>
@@ -430,20 +449,20 @@
 
         <div id="db-installed" class="hidden space-y-4">
           <div class="card flex flex-wrap items-center gap-3">
-            <span id="db-status-dot" class="h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400"></span>
-            <span id="db-status-text" class="text-sm text-gray-600 dark:text-gray-300"></span>
-            <button class="btn-secondary !px-3 !py-1.5 text-sm ml-auto" onclick="loadDatabases()">Aggiorna</button>
+            <span id="db-status-dot" class="hidden"></span>
+            <span id="db-status-text" class="badge"></span>
+            <button class="btn-secondary ml-auto" onclick="loadDatabases()">Aggiorna</button>
           </div>
 
           <div class="card space-y-2">
-            <h3 class=" section-title">Accesso remoto</h3>
+            <h2 class="font-display text-xl font-bold">Accesso remoto</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400">Per connettersi ai database da un altro dispositivo sulla tua rete Tailscale (non solo dal Pi stesso). Apre PostgreSQL solo alla rete Tailscale, non a Internet.</p>
             <div id="db-remote-status" class="text-sm"></div>
             <button id="db-enable-remote-btn" class="btn hidden" onclick="enableRemoteAccess()">Abilita accesso remoto</button>
           </div>
 
           <div class="card space-y-2">
-            <h3 class=" section-title">Nuovo database</h3>
+            <h2 class="font-display text-xl font-bold">Nuovo database</h2>
             <div class="flex flex-wrap items-center gap-2">
               <input id="db-new-name" class="input max-w-xs" placeholder="nome (es. fantafede)" />
               <select id="db-new-app" class="input max-w-xs"><option value="">— per quale app (opzionale) —</option></select>
@@ -559,28 +578,35 @@
       </div>
 
       <div id="services-view" class="view hidden space-y-3">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Servizi</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Unit systemd del sistema e loro stato.</p></div>
-        <div>
-          <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>
-        </div>
-        <div class="card overflow-x-auto !p-0">
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Servizi di sistema</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Unità systemd · stato, caricamento e comandi.</p></div>
+        <div class="card">
+          <div class="panel-head">
+            <div class="flex items-center gap-2"><h2 class="font-display text-xl font-bold">Unità di servizio</h2><span id="services-count" class="badge badge-ok"></span></div>
+            <button class="btn-secondary" onclick="loadServices()">Aggiorna</button>
+          </div>
+          <input id="services-filter" data-filter="services-table" type="search" class="input mb-3 max-w-md" placeholder="Filtra unità o stato" />
+          <div class="overflow-x-auto">
           <table id="services-table" class="table-base">
-            <thead><tr><th>Unit</th><th>Load</th><th>Active</th><th>Sub</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>Unità</th><th>Caricamento</th><th>Stato</th><th>Sottostato</th><th>Azioni</th></tr></thead>
             <tbody></tbody>
           </table>
+          </div>
         </div>
       </div>
 
       <div id="files-view" class="view hidden">
-        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">File</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Esplora e modifica i file del Pi.</p></div>
-        <div id="files-path" class="mb-2 text-sm text-gray-500 dark:text-gray-400"></div>
-        <div class="card overflow-x-auto !p-0">
+        <div class="mb-4"><h1 class="font-display text-3xl font-bold tracking-tight">Esplora file</h1><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Esplora e modifica i file del Pi.</p></div>
+        <div class="card">
+          <div class="panel-head"><code id="files-path" class="font-mono text-base"></code></div>
+          <input id="files-filter" data-filter="files-list" type="search" class="input mb-3 max-w-md" placeholder="Filtra file e cartelle" />
+          <div class="overflow-x-auto">
           <table id="files-list" class="table-base">
-            <thead><tr><th>Nome</th><th>Dimensione</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Dimensione</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
+          </div>
         </div>
-        <h4 class="section-title mb-1.5 mt-4">Editor</h4>
+        <h2 class="mb-1.5 mt-5 font-display text-xl font-bold">Editor</h2>
         <div id="editor-path" class="mb-1.5 text-sm text-gray-500 dark:text-gray-400"></div>
         <textarea id="file-editor" placeholder="Apri un file per modificarlo..." class="h-72 w-full rounded-lg border border-border-light bg-white p-2 font-mono text-sm text-gray-800 dark:border-border-dark dark:bg-black dark:text-gray-100"></textarea>
         <div class="mt-2"><button class="btn" onclick="saveFile()">Salva</button></div>

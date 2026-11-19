@@ -255,10 +255,14 @@ async function loadServices() {
     const res = await fetch('/api/services', { headers: authHeaders() });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'errore');
+    const running = d.services.filter((s) => s.sub === 'running').length;
+    const cnt = document.getElementById('services-count');
+    if (cnt) cnt.textContent = running + ' in esecuzione';
     tbody.innerHTML = d.services
       .map(
         (s) => `<tr>
-          <td>${esc(s.unit)}</td><td>${esc(s.load)}</td><td>${esc(s.active)}</td><td>${esc(s.sub)}</td>
+          <td class="font-mono text-xs">${esc(s.unit)}</td><td>${esc(s.load)}</td>
+          <td><span class="badge ${s.active === 'active' ? 'badge-ok' : s.active === 'failed' ? 'badge-alert' : ''}">${s.active === 'active' ? 'Attiva' : s.active === 'failed' ? 'Fallita' : 'Inattiva'}</span></td><td>${esc(s.sub)}</td>
           <td class="space-x-1">
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction(${jsArg(s.unit)},'start')">start</button>
             <button class="btn-secondary !px-2 !py-1 text-xs" onclick="serviceAction(${jsArg(s.unit)},'stop')">stop</button>
@@ -291,10 +295,10 @@ async function loadFiles(dir) {
     .forEach((it) => {
       const p = (dir ? dir + '/' : '') + it.name;
       if (it.isDir) {
-        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="loadFiles(${jsArg(p)})">📁 ${esc(it.name)}</button></td><td></td>
+        rows.push(`<tr><td><button class="font-semibold text-accent hover:underline" onclick="loadFiles(${jsArg(p)})">${esc(it.name)}</button></td><td></td>
           <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry(${jsArg(p)})">elimina</button></td></tr>`);
       } else {
-        rows.push(`<tr><td><button class="text-gray-200 hover:text-white" onclick="openFile(${jsArg(p)})">📄 ${esc(it.name)}</button></td><td>${fmtBytes(it.size)}</td>
+        rows.push(`<tr><td><button class="hover:text-accent hover:underline" onclick="openFile(${jsArg(p)})">${esc(it.name)}</button></td><td>${fmtBytes(it.size)}</td>
           <td><button class="btn-danger !px-2 !py-1 text-xs" onclick="deleteEntry(${jsArg(p)})">elimina</button></td></tr>`);
       }
     });
@@ -980,9 +984,11 @@ async function loadWifi() {
     const res = await fetch('/api/wifi/status', { headers: authHeaders() });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'errore');
-    statusEl.innerHTML = `Interfaccia <b>${esc(d.device)}</b> — stato <b>${esc(d.state)}</b>` +
-      (d.connection ? ` — connesso a <b>${esc(d.connection)}</b>` : ' — non connesso') +
-      (d.ip ? ` — IP <b>${esc(d.ip)}</b>` : '');
+    const on = !!d.connection;
+    statusEl.innerHTML = `<div class="panel-head"><h2 class="font-display text-xl font-bold">Interfaccia ${esc(d.device)}</h2><span class="badge ${on ? 'badge-ok' : ''}">${on ? 'Connessa' : 'Disconnessa'}</span></div>` +
+      `<div class="big-value">${on ? esc(d.connection) : 'Offline'}</div>` +
+      `<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">${d.ip ? 'Indirizzo IP · ' + esc(d.ip) : 'Nessuna rete collegata'} · stato ${esc(d.state)}</p>` +
+      (on ? '<button class="btn-secondary mt-3" onclick="fetch(\'/api/wifi/disconnect\',{method:\'POST\',headers:authHeaders()}).then(loadWifi)">Disconnetti</button>' : '');
   } catch (err) {
     statusEl.textContent = 'Errore: ' + err.message;
   }
@@ -999,7 +1005,7 @@ async function scanWifi() {
     tbody.innerHTML = d.networks
       .map(
         (n) => `<tr>
-          <td>${n.inUse ? '✅ ' : ''}${esc(n.ssid)}</td>
+          <td>${esc(n.ssid)}${n.inUse ? ' <span class="badge badge-ok">in uso</span>' : ''}</td>
           <td>${esc(n.signal)}%</td>
           <td>${esc(n.security || 'aperta')}</td>
           <td><button class="btn-secondary !px-2 !py-1 text-xs" onclick="promptConnect(${jsArg(n.ssid)})">connetti</button></td>
@@ -1037,7 +1043,7 @@ async function connectWifi() {
 function resetUpdatesView() {
   document.getElementById('updates-out').textContent = '';
   document.getElementById('updates-table').querySelector('tbody').innerHTML = '';
-  document.getElementById('updates-summary').textContent = 'Premi "Controlla aggiornamenti" per verificare i pacchetti disponibili.';
+  document.getElementById('updates-summary').textContent = 'Premi "Controlla" per cercare aggiornamenti';
 }
 
 async function checkUpdates() {
@@ -1051,7 +1057,7 @@ async function checkUpdates() {
     if (!res.ok) throw new Error(d.error || 'errore');
     summary.textContent = d.count > 0
       ? `${d.count} pacchetti aggiornabili`
-      : 'Sistema aggiornato, nessun pacchetto da aggiornare';
+      : 'Sistema aggiornato';
     document.getElementById('upgrade-btn').classList.toggle('hidden', d.count === 0);
     tbody.innerHTML = d.packages
       .map((p) => `<tr><td>${esc(p.package)}</td><td>${esc(p.currentVersion)}</td><td>${esc(p.newVersion)}</td><td>${esc(p.repo)}</td></tr>`)
@@ -1202,16 +1208,16 @@ function renderRepos() {
     .sort((a, b) => (b.clonedApp ? 1 : 0) - (a.clonedApp ? 1 : 0))
     .map(({ r, clonedApp }) => {
       const visBadge = r.private
-        ? '<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">privata</span>'
-        : '<span class="badge bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">pubblica</span>';
+        ? '<span class="badge badge-warn">Privata</span>'
+        : '<span class="badge">Pubblica</span>';
       const updateInfo = clonedApp ? gitInfoCache[clonedApp.id] : null;
       const needsUpdate = updateInfo && updateInfo.hasUpstream && updateInfo.behind > 0;
       const updateBadge = needsUpdate
         ? `<span class="badge bg-accent/15 text-accent" title="${updateInfo.behind} aggiornament${updateInfo.behind > 1 ? 'i' : 'o'} disponibil${updateInfo.behind > 1 ? 'i' : 'e'}">⬆️ aggiornamento disponibile</span>`
         : '';
       const statusBadge = clonedApp
-        ? `<span class="badge bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">${clonedApp.status === 'running' ? 'installata · attiva' : 'installata'}</span> ${updateBadge}`
-        : '<span class="text-xs text-gray-400 dark:text-gray-500">—</span>';
+        ? `<span class="badge badge-ok">${clonedApp.status === 'running' ? 'Installata · attiva' : 'Installata'}</span> ${updateBadge}`
+        : '<span class="badge">Disponibile</span>';
       const action = clonedApp
         ? `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="openAppDetail(${jsArg(clonedApp.id)})">Gestisci</button>`
         : `<button class="btn-secondary !px-2 !py-1 text-xs" onclick="cloneRepo(${jsArg(r.fullName)},${jsArg(r.cloneUrl)})">Clona</button>`;
@@ -1637,7 +1643,7 @@ async function loadTunnelStatus() {
       text.textContent = 'cloudflared non è installato su questo Pi';
       return;
     }
-    dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full ' + (d.active ? 'bg-green-500' : 'bg-red-500');
+    text.className = 'badge ' + (d.active ? 'badge-ok' : 'badge-alert');
     text.textContent = d.active ? 'Tunnel attivo' : 'Tunnel non attivo';
   } catch (err) {
     dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400';
@@ -1771,12 +1777,12 @@ async function loadDbView() {
 
   const dot = document.getElementById('db-status-dot');
   const text = document.getElementById('db-status-text');
-  dot.className = 'h-2.5 w-2.5 shrink-0 rounded-full ' + (d.active ? 'bg-green-500' : 'bg-red-500');
+  text.className = 'badge ' + (d.active ? 'badge-ok' : 'badge-alert');
   text.textContent = d.active ? 'PostgreSQL attivo' : 'PostgreSQL non attivo';
 
   const remoteStatus = document.getElementById('db-remote-status');
   const remoteBtn = document.getElementById('db-enable-remote-btn');
-  remoteStatus.textContent = d.remoteAccess ? 'Abilitato' : 'Non abilitato';
+  remoteStatus.innerHTML = '<span class="badge ' + (d.remoteAccess ? 'badge-ok' : '') + '">' + (d.remoteAccess ? 'Abilitato sulla rete Tailscale' : 'Non abilitato') + '</span>';
   remoteBtn.classList.toggle('hidden', d.remoteAccess);
 
   const appSelect = document.getElementById('db-new-app');
@@ -1835,7 +1841,7 @@ function renderDatabases() {
   tbody.innerHTML = currentDbs
     .map((db) => {
       const mainRow = `<tr>
-          <td>${esc(db.dbName)}${db.exists ? '' : ' <span class="badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">non trovato su Postgres</span>'}</td>
+          <td>${esc(db.dbName)}${db.exists ? '' : ' <span class="badge badge-alert">Non trovato su Postgres</span>'}</td>
           <td>${esc(db.forApp || '—')}</td>
           <td class="space-y-1">
             <div><code class="text-xs">${'•'.repeat(12)}</code> <span class="text-xs text-gray-500 dark:text-gray-400">locale</span>
@@ -1950,3 +1956,14 @@ if (TOKEN) {
     if (d.ok) showApp();
   });
 }
+
+// Filtro righe per i campi di ricerca (data-filter = id della tabella)
+document.addEventListener('input', (e) => {
+  const id = e.target && e.target.dataset && e.target.dataset.filter;
+  if (!id) return;
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#' + id + ' tbody tr').forEach((tr) => {
+    tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+// data-filter-init
