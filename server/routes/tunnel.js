@@ -105,7 +105,15 @@ router.put('/rules', express.json({ limit: '256kb' }), async (req, res) => {
   // Se il browser sta usando la dashboard proprio attraverso questo tunnel (es. pi.rewi.dev),
   // riavviare cloudflared PRIMA di rispondere interromperebbe la connessione che deve
   // portare questa stessa risposta. Rispondi subito e riavvia dopo, fuori dal ciclo richiesta/risposta.
-  res.json({ ok: true, newHostnames, tunnel: base.tunnel });
+  // Il record DNS si crea qui, lato server: non deve dipendere dal browser (che puo chiudere la
+  // pagina o non riuscire a confermare il riavvio del tunnel, e il record non verrebbe creato).
+  let dnsResults = [];
+  try {
+    dnsResults = await createDnsRecords(base.tunnel, newHostnames);
+  } catch (err) {
+    dnsResults = newHostnames.map((hostname) => ({ hostname, ok: false, error: err.message }));
+  }
+  res.json({ ok: true, newHostnames, tunnel: base.tunnel, dnsResults });
   setTimeout(() => {
     run('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 30000 });
   }, 300);
@@ -148,10 +156,8 @@ async function createDnsRecordViaApi(hostname, tunnel, zone, token) {
   return { ok, error: ok ? null : message };
 }
 
-router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
-  const hostnames = Array.isArray(req.body && req.body.hostnames) ? req.body.hostnames : [];
-  const tunnel = req.body && req.body.tunnel;
-  if (!tunnel || !hostnames.length) return res.json({ results: [] });
+async function createDnsRecords(tunnel, hostnames) {
+  if (!tunnel || !hostnames.length) return [];
 
   const cfToken = process.env.CLOUDFLARE_API_TOKEN;
   if (!cfToken) {
@@ -163,21 +169,21 @@ router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
       const ok = dnsRes.ok || /already exists/i.test(dnsRes.stderr);
       results.push({ hostname, ok, error: ok ? null : dnsRes.stderr });
     }
-    return res.json({ results });
+    return results;
   }
 
   let zones;
   try {
     zones = await listCloudflareZones(cfToken);
   } catch (err) {
-    return res.json({ results: hostnames.map((hostname) => ({ hostname, ok: false, error: err.message })) });
+    return hostnames.map((hostname) => ({ hostname, ok: false, error: err.message }));
   }
 
   const results = [];
   for (const hostname of hostnames) {
     const zone = findZoneForHostname(hostname, zones);
     if (!zone) {
-      results.push({ hostname, ok: false, error: `nessuna zona Cloudflare trovata per ${hostname}` });
+      results.push({ hostname, ok: false, error: 'nessuna zona Cloudflare trovata per ' + hostname });
       continue;
     }
     try {
@@ -187,7 +193,12 @@ router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
       results.push({ hostname, ok: false, error: err.message });
     }
   }
-  res.json({ results });
+  return results;
+}
+
+router.post('/rules/dns', express.json({ limit: '4kb' }), async (req, res) => {
+  const hostnames = Array.isArray(req.body && req.body.hostnames) ? req.body.hostnames : [];
+  res.json({ results: await createDnsRecords(req.body && req.body.tunnel, hostnames) });
 });
 
 router.post('/restart', async (req, res) => {

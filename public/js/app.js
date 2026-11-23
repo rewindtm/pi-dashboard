@@ -1716,6 +1716,16 @@ function removeTunnelRuleRow(i) {
   renderTunnelRules();
 }
 
+function dnsSummary(d) {
+  const results = d.dnsResults || [];
+  const ok = results.filter((r) => r.ok).map((r) => r.hostname);
+  const failed = results.filter((r) => !r.ok);
+  let msg = '';
+  if (ok.length) msg += ' DNS creato per: ' + ok.join(', ') + '.';
+  if (failed.length) msg += ' Errore DNS per: ' + failed.map((r) => r.hostname + ' (' + r.error + ')').join(', ') + '.';
+  return msg;
+}
+
 async function saveTunnelRules() {
   const out = document.getElementById('tunnel-rules-out');
   out.textContent = 'Salvataggio in corso...';
@@ -1742,33 +1752,14 @@ async function saveTunnelRules() {
   out.textContent = 'Salvato. Riavvio del tunnel in corso...';
   const backUp = await waitForTunnelBackUp();
   if (!backUp) {
-    out.textContent = 'Salvato, ma non riesco a confermare che il tunnel sia tornato attivo. Controlla lo stato e riprova.';
+    out.textContent = 'Salvato, ma non riesco a confermare che il tunnel sia tornato attivo. Controlla lo stato e riprova.' + dnsSummary(d);
     loadTunnelStatus();
     return;
   }
   out.textContent = 'Tunnel riavviato.';
   loadTunnelStatus();
 
-  if (d.newHostnames && d.newHostnames.length) {
-    out.textContent += ` Creazione record DNS per: ${d.newHostnames.join(', ')}...`;
-    try {
-      const dnsRes = await fetch('/api/tunnel/rules/dns', {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tunnel: d.tunnel, hostnames: d.newHostnames }),
-      });
-      const dnsData = await dnsRes.json();
-      const results = dnsData.results || [];
-      const ok = results.filter((r) => r.ok).map((r) => r.hostname);
-      const failed = results.filter((r) => !r.ok);
-      let dnsMsg = '';
-      if (ok.length) dnsMsg += ` DNS creato per: ${ok.join(', ')}.`;
-      if (failed.length) dnsMsg += ` Errore DNS per: ${failed.map((r) => r.hostname + ' (' + r.error + ')').join(', ')}.`;
-      out.textContent = 'Tunnel riavviato.' + dnsMsg;
-    } catch (err) {
-      out.textContent = 'Tunnel riavviato, ma la creazione DNS è fallita: ' + err.message;
-    }
-  }
+  out.textContent = 'Tunnel riavviato.' + dnsSummary(d);
 }
 
 async function waitForTunnelBackUp(maxAttempts = 20) {
