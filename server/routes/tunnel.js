@@ -25,14 +25,26 @@ function readConfig() {
     tunnel: doc.tunnel || null,
     credentialsFile: doc['credentials-file'] || null,
     rules: rules.map((r) => ({ hostname: r.hostname, service: r.service })),
+    // Impostazioni avanzate per hostname (es. noTLSVerify): vanno conservate quando si riscrive il file.
+    originRequests: Object.fromEntries(rules.filter((r) => r.originRequest).map((r) => [r.hostname, r.originRequest])),
   };
+}
+
+// Dispositivi di rete (UniFi, switch, NAS...) espongono HTTPS con certificato autofirmato:
+// senza noTLSVerify cloudflared rifiuta la connessione.
+function ingressEntry(r, originRequests) {
+  const entry = { hostname: r.hostname, service: r.service };
+  const kept = originRequests && originRequests[r.hostname];
+  if (kept) entry.originRequest = kept;
+  else if (/^https:\/\//i.test(r.service)) entry.originRequest = { noTLSVerify: true };
+  return entry;
 }
 
 function writeConfig(base, rules) {
   const doc = {
     tunnel: base.tunnel,
     'credentials-file': base.credentialsFile,
-    ingress: [...rules.map((r) => ({ hostname: r.hostname, service: r.service })), CATCH_ALL],
+    ingress: [...rules.map((r) => ingressEntry(r, base.originRequests)), CATCH_ALL],
   };
   const content = yaml.dump(doc, { lineWidth: -1 });
   return new Promise((resolve, reject) => {
