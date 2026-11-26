@@ -1749,20 +1749,20 @@ async function saveTunnelRules() {
   // Se stai usando la dashboard proprio attraverso questo tunnel, la connessione cade
   // per qualche secondo mentre cloudflared si riavvia: aspetta che torni raggiungibile
   // prima di procedere, invece di dare per scontato che sia già di nuovo su.
-  out.textContent = 'Salvato. Riavvio del tunnel in corso...';
+  out.textContent = 'Salvato. Riavvio del tunnel in corso (può richiedere circa 30 secondi)...' + dnsSummary(d);
   const backUp = await waitForTunnelBackUp();
   if (!backUp) {
     out.textContent = 'Salvato, ma non riesco a confermare che il tunnel sia tornato attivo. Controlla lo stato e riprova.' + dnsSummary(d);
     loadTunnelStatus();
     return;
   }
-  out.textContent = 'Tunnel riavviato.';
   loadTunnelStatus();
-
   out.textContent = 'Tunnel riavviato.' + dnsSummary(d);
 }
 
-async function waitForTunnelBackUp(maxAttempts = 20) {
+// cloudflared impiega ~30 s a spegnersi (chiusura ordinata delle connessioni) prima di ripartire:
+// 20 tentativi da 1 s non bastavano e la pagina mostrava un falso "non riesco a confermare".
+async function waitForTunnelBackUp(maxAttempts = 75) {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {
